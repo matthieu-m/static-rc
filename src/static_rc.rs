@@ -145,6 +145,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     }
 
     /// Adjusts the NUMerator and DENUMerator of the ratio of the instance, preserving the ratio.
+    #[cfg_attr(not(feature = "compile-time-ratio"), track_caller)]
     #[inline(always)]
     pub fn adjust<const N: usize, const D: usize>(this: Self) -> StaticRc<T, N, D>
     where
@@ -160,6 +161,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     }
 
     /// Splits the current instance into two instances with the specified NUMerators.
+    #[cfg_attr(not(feature = "compile-time-ratio"), track_caller)]
     #[inline(always)]
     pub fn split<const A: usize, const B: usize>(this: Self) -> (StaticRc<T, A, DEN>, StaticRc<T, B, DEN>)
     where
@@ -179,6 +181,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// #   Panics
     ///
     /// If the two instances do no point to the same allocation, as determined by `StaticRc::ptr_eq`.
+    #[track_caller]
     #[inline(always)]
     pub fn join<const A: usize, const B: usize>(left: StaticRc<T, A, DEN>, right: StaticRc<T, B, DEN>) -> Self
     where
@@ -187,7 +190,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         #[cfg(not(feature = "compile-time-ratio"))]
         assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
 
-        assert!(StaticRc::ptr_eq(&left, &right), "{:?} != {:?}", left.pointer.as_ptr(), right.pointer.as_ptr());
+        assert!(StaticRc::ptr_eq(&left, &right), "attempted to join two `StaticRc`s that do not refer to the same value: {:?} != {:?}", left.pointer.as_ptr(), right.pointer.as_ptr());
 
         let pointer = left.pointer;
         mem::forget(left);
@@ -210,16 +213,14 @@ impl<const NUM: usize, const DEN: usize> StaticRc<dyn any::Any, NUM, DEN> {
 }
 
 impl<T: ?Sized, const NUM: usize, const DEN: usize> Drop for StaticRc<T, NUM, DEN> {
+    #[track_caller]
     #[inline(always)]
     fn drop(&mut self) {
-        debug_assert_eq!(NUM, DEN, "{} != {}", NUM, DEN);
-
-        if NUM == DEN {
-            //  Safety:
-            //  -   Ratio = 1, hence full ownership.
-            //  -   `self.pointer` was allocated by Box.
-            unsafe { Box::from_raw(self.pointer.as_ptr()) };
-        }
+        assert_eq!(NUM, DEN, "attempted to drop `StaticRc` without full ownership: {} != {}", NUM, DEN);
+        //  Safety:
+        //  -   Ratio = 1, hence full ownership.
+        //  -   `self.pointer` was allocated by Box.
+        unsafe { Box::from_raw(self.pointer.as_ptr()) };
     }
 }
 
