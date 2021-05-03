@@ -495,3 +495,17 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> marker::Unpin for Static
 unsafe impl<'a, T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> marker::Send for StaticRcRef<'a, T, NUM, DEN> {}
 
 unsafe impl<'a, T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync for StaticRcRef<'a, T, NUM, DEN> {}
+
+
+#[test]
+fn test_use_after_free() {
+    let a = String::from("foo");
+    let mut a_ref = &a;
+    let mut rc = StaticRcRef::<_,1,1>::new(&mut a_ref);
+    {
+        let b = String::from("bar");
+        *rc = &b; // a_ref now points to b
+    }
+    // b is now dropped
+    assert_ne!(a_ref, "bar");
+}
