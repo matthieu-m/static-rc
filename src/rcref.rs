@@ -497,15 +497,17 @@ unsafe impl<'a, T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> ma
 unsafe impl<'a, T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync for StaticRcRef<'a, T, NUM, DEN> {}
 
 
-#[test]
+/// ```compile_fail,E0597
+/// let a = String::from("foo");
+/// let mut a_ref = &a;
+/// let mut rc = static_rc::StaticRcRef::<_,1,1>::new(&mut a_ref);
+/// {
+///     let b = String::from("bar");
+///     *rc = &b; // a_ref now points to b
+/// }
+/// // b is now dropped
+/// assert_ne!(a_ref, "bar");  // This should fail to compile.
+/// ```
 fn test_use_after_free() {
-    let a = String::from("foo");
-    let mut a_ref = &a;
-    let mut rc = StaticRcRef::<_,1,1>::new(&mut a_ref);
-    {
-        let b = String::from("bar");
-        *rc = &b; // a_ref now points to b
-    }
-    // b is now dropped
-    //assert_ne!(a_ref, "bar");  // This should fail to compile.
+    #![allow(dead_code)]
 }
