@@ -38,7 +38,7 @@ use core::ops::DispatchFromDyn;
 ///     and extra capabilities are unlocked.
 pub struct StaticRcRef<'a, T: ?Sized, const NUM: usize, const DEN: usize> {
     pointer: NonNull<T>,
-    _marker: PhantomData<&'a T>,
+    _marker: PhantomData<&'a mut T>,
 }
 
 impl<'a, T, const N: usize> StaticRcRef<'a, T, N, N> {
@@ -507,5 +507,5 @@ fn test_use_after_free() {
         *rc = &b; // a_ref now points to b
     }
     // b is now dropped
-    assert_ne!(a_ref, "bar");
+    //assert_ne!(a_ref, "bar");  // This should fail to compile.
 }
