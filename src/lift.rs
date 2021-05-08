@@ -1,3 +1,6 @@
+//! Lifting allows tying the note when linear or affine types -- such as `StaticRc` -- are used to implement cyclic
+//! data-structures such as linked-lists.
+
 use core::mem;
 
 /// Lifts `root` into the slot provided by `fun`; returns the previous value of the slot, if any.

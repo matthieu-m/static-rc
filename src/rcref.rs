@@ -1,4 +1,4 @@
-//  StaticRcRef
+//! `StaticRcRef` is a compile-time referenced counted access to a mutable reference.
 
 use core::{
     any,
@@ -41,23 +41,72 @@ pub struct StaticRcRef<'a, T: ?Sized, const NUM: usize, const DEN: usize> {
     _marker: PhantomData<&'a mut T>,
 }
 
-impl<'a, T, const N: usize> StaticRcRef<'a, T, N, N> {
+impl<'a, T: ?Sized, const N: usize> StaticRcRef<'a, T, N, N> {
     /// Constructs a new `StaticRcRef<'a, T, N, N>`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
-    pub fn new(value: &'a mut T) -> Self {
+    pub fn new(value: &'a mut T) -> Self
+    where
+        AssertLeType!(1, N): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        assert!(N > 0);
+
         let pointer = NonNull::from(value);
         Self { pointer, _marker: PhantomData }
     }
 
     /// Constructs a new `Pin<StaticRcRef<'a, T, N, N>>`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::pin(&mut value);
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
-    pub fn pin(value: &'a mut T) -> pin::Pin<Self> {
+    pub fn pin(value: &'a mut T) -> pin::Pin<Self>
+    where
+        AssertLeType!(1, N): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        assert!(N > 0);
+
         //  Safety:
         //  -   The `value` is mutably borrowed, and cannot be moved out of without full ownership.
         unsafe { pin::Pin::new_unchecked(Self::new(value)) }
     }
 
     /// Returns the inner value.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let inner: &mut i32 = Full::into_inner(rc);
+    /// assert_eq!(42, *inner);
+    /// ```
     #[inline(always)]
     pub fn into_inner(this: Self) -> &'a mut T {
         //  Safety:
@@ -65,10 +114,20 @@ impl<'a, T, const N: usize> StaticRcRef<'a, T, N, N> {
         //  -   Original lifetime is restored.
         unsafe { &mut *this.pointer.as_ptr() }
     }
-}
 
-impl<'a, T: ?Sized, const N: usize> StaticRcRef<'a, T, N, N> {
     /// Returns a mutable reference into the given `StaticRcRef`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let mut rc = Full::new(&mut value);
+    /// assert_eq!(42, *Full::get_mut(&mut rc));
+    /// ```
     #[inline(always)]
     pub fn get_mut(this: &mut Self) -> &mut T {
         //  Safety:
@@ -79,16 +138,60 @@ impl<'a, T: ?Sized, const N: usize> StaticRcRef<'a, T, N, N> {
 
 impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, DEN> {
     /// Consumes the `StaticRcRef`, returning the wrapped pointer.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let pointer = Full::into_raw(rc);
+    /// assert_eq!(&mut value as *mut _, pointer.as_ptr());
+    /// ```
     #[inline(always)]
     pub fn into_raw(this: Self) -> NonNull<T> { this.pointer }
 
     /// Provides a raw pointer to the data.
     ///
     /// `StaticRcRef` is not consumed or affected in any way, the pointer is valid as long as the original value is.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let pointer = &mut value as *mut _;
+    ///
+    /// let rc = Full::new(&mut value);
+    /// let other_pointer = Full::as_ptr(&rc);
+    ///
+    /// assert_eq!(pointer, other_pointer.as_ptr());
+    /// ```
     #[inline(always)]
     pub fn as_ptr(this: &Self) -> NonNull<T> { this.pointer }
 
     /// Provides a reference to the data.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    ///
+    /// let r = Full::get_ref(&rc);
+    ///
+    /// assert_eq!(42, *r);
+    /// ```
     #[inline(always)]
     pub fn get_ref(this: &Self) -> &T {
         //  Safety:
@@ -105,9 +208,31 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// -   If `N / D` is different from `NUM / DEN`, then specific restrictions apply. The user is responsible for
     ///     ensuring proper management of the ratio of shares, and ultimately that the value is not dropped twice.
     #[inline(always)]
-    pub unsafe fn from_raw(pointer: NonNull<T>) -> Self { Self { pointer, _marker: PhantomData, } }
+    pub unsafe fn from_raw(pointer: NonNull<T>) -> Self
+    where
+        AssertLeType!(1, NUM): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        assert!(NUM > 0);
+
+        Self { pointer, _marker: PhantomData, }
+    }
 
     /// Returns true if the two `StaticRcRef` point to the same allocation.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let (one, two) = Full::split::<1, 1>(rc);
+    ///
+    /// assert!(StaticRcRef::ptr_eq(&one, &two));
+    /// ```
     #[inline(always)]
     pub fn ptr_eq<const N: usize, const D: usize>(this: &Self, other: &StaticRcRef<'a, T, N, D>) -> bool {
         StaticRcRef::as_ptr(this) == StaticRcRef::as_ptr(other)
@@ -118,13 +243,31 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N / D <> NUM / DEN`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let rc = Full::adjust::<1, 1>(rc);
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
     pub fn adjust<const N: usize, const D: usize>(this: Self) -> StaticRcRef<'a, T, N, D>
     where
+        AssertLeType!(1, N): Sized,
         AssertEqType!(N * DEN, NUM * D): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM * D, N * DEN, "{} / {} != {} / {}", NUM, DEN, N, D);
+        {
+            assert!(N > 0);
+            assert_eq!(NUM * D, N * DEN, "{} / {} != {} / {}", NUM, DEN, N, D);
+        }
 
         StaticRcRef { pointer: this.pointer, _marker: PhantomData }
     }
@@ -134,13 +277,34 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `A + B <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let (one, two) = Full::split::<1, 1>(rc);
+    ///
+    /// assert_eq!(42, *one);
+    /// assert_eq!(42, *two);
+    /// ```
     #[inline(always)]
     pub fn split<const A: usize, const B: usize>(this: Self) -> (StaticRcRef<'a, T, A, DEN>, StaticRcRef<'a, T, B, DEN>)
     where
+        AssertLeType!(1, A): Sized,
+        AssertLeType!(1, B): Sized,
         AssertEqType!(A + B, NUM): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+        {
+            assert!(A > 0);
+            assert!(B > 0);
+            assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+        }
 
         let pointer = this.pointer;
         let _marker = PhantomData;
@@ -148,24 +312,40 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         (StaticRcRef { pointer, _marker, }, StaticRcRef { pointer, _marker, })
     }
 
-    /// Splits the current instance into two instances with the specified NUMerators.
+    /// Splits the current instance into DIM instances with the specified Numerators.
     ///
     /// #   Panics
     ///
-    /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N * DIM / D <> NUM / DEN`.
+    /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let array = Full::split_array::<1, 2>(rc);
+    ///
+    /// assert_eq!(42, *array[0]);
+    /// assert_eq!(42, *array[1]);
+    /// ```
     #[inline(always)]
-    pub fn split_array<const N: usize, const D: usize, const DIM: usize>(this: Self) -> [StaticRcRef<'a, T, N, D>; DIM]
+    pub fn split_array<const N: usize, const DIM: usize>(this: Self) -> [StaticRcRef<'a, T, N, DEN>; DIM]
     where
         T: 'a,
-        AssertEqType!(N * DIM * DEN, NUM * D): Sized,
-        AssertLeType!(mem::size_of::<[StaticRcRef<'a, T, N, D>; DIM]>(), usize::MAX / 2 + 1): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
+        AssertLeType!(mem::size_of::<[StaticRcRef<'a, T, N, DEN>; DIM]>(), usize::MAX / 2 + 1): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM * D, N * DIM * DEN, "{} * {} != {} * {} * {}", NUM, D, N, DIM, DEN);
+        {
+            assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
 
-        #[cfg(not(feature = "compile-time-ratio"))]
-        assert!(mem::size_of::<[StaticRcRef<T, N, D>; DIM]>() <= (isize::MAX as usize),
-            "Size of result ({}) exceeeds isize::MAX", mem::size_of::<[StaticRcRef<T, N, D>; DIM]>());
+            assert!(mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>() <= (isize::MAX as usize),
+                "Size of result ({}) exceeeds isize::MAX", mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>());
+        }
 
         let pointer = this.pointer;
         let _marker = PhantomData;
@@ -177,7 +357,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
             //  -   `destination` within bounds of allocated array (< DIM).
             //  -   Offset doesn't overflow `isize`, as per array-size assertion.
             //  -   Offset doesn't wrap around, as per array-size assertion.
-            let destination = unsafe { (array.as_mut_ptr() as *mut StaticRcRef<T, N, D>).add(i) };
+            let destination = unsafe { (array.as_mut_ptr() as *mut StaticRcRef<T, N, DEN>).add(i) };
 
             //  Safety:
             //  -   `destination` is valid for writes.
@@ -197,6 +377,21 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// If the two instances do no point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
     ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let (one, two) = Full::split::<1, 1>(rc);
+    /// let rc = Full::join(one, two);
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
     pub fn join<const A: usize, const B: usize>(left: StaticRcRef<'a, T, A, DEN>, right: StaticRcRef<'a, T, B, DEN>) -> Self
     where
@@ -220,6 +415,21 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let (one, two) = Full::split::<1, 1>(rc);
+    /// let rc = unsafe { Full::join_unchecked(one, two) };
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
     pub unsafe fn join_unchecked<const A: usize, const B: usize>(
         left: StaticRcRef<'a, T, A, DEN>,
@@ -231,36 +441,90 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         #[cfg(not(feature = "compile-time-ratio"))]
         assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
 
+        debug_assert!(StaticRcRef::ptr_eq(&left, &_right), "{:?} != {:?}", left.pointer.as_ptr(), _right.pointer.as_ptr());
+
         Self { pointer: left.pointer, _marker: PhantomData, }
     }
 
-    /// Lifts `this` into the slot provided by `fun`; returns the previous value of the slot, if any.
+    /// Joins DIM instances into a single instance.
     ///
-    /// This function is useful, for example, to "tie the knot" when appending 2 linked-lists: it is easy to splice the
-    /// the head of the back linked-list at the back of the front linked-list, but then one has lost the head pointer
-    /// and can no longer splice the tail of the front linked-list to it.
-    pub fn lift<'b, F>(this: Self, fun: F) -> Option<Self>
+    /// #   Panics
+    ///
+    /// If all instances do not point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
+    ///
+    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let array = Full::split_array::<1, 2>(rc);
+    /// let rc = Full::join_array(array);
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
+    #[inline(always)]
+    pub fn join_array<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM]) -> Self
     where
-        'a: 'b,
-        T: 'b,
-        F: FnOnce(&'b Self) -> &'b mut Option<Self>,
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
     {
-        let slot = {
-            //  Safety:
-            //  -   Even though the lifetime of `this_ref` and `this` was "unlinked" by going through a pointer,
-            //      `this_ref` will notbe used after moving `this`, and therefore will remain valid throughout its used.
-            let this_ref = unsafe { &*(&this as *const _) };
+        let first = &array[0];
+        for successive in &array[1..] {
+            assert!(StaticRcRef::ptr_eq(&first, &successive),
+                "{:?} != {:?}", first.pointer.as_ptr(), successive.pointer.as_ptr());
+        }
 
-            fun(this_ref) as *mut Option<Self>
-        };
+        unsafe { Self::join_array_unchecked(array) }
+    }
 
-        //  Safety:
-        //  -   Even though the lifetime of `slot` and `this` was "unlinked" by going through a pointer, `slot` is
-        //      still validfor the duration of this function because `this` is not destroyed, and therefore its
-        //      pointee is still alive.
-        let slot = unsafe { &mut *slot };
+    /// Joins DIM instances into a single instance.
+    ///
+    /// #   Panics
+    ///
+    /// If all instances do not point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
+    ///
+    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Full::new(&mut value);
+    /// let array = Full::split_array::<1, 2>(rc);
+    /// let rc = unsafe { Full::join_array_unchecked(array) };
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
+    #[inline(always)]
+    pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM])
+        -> Self
+    where
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        {
+            assert!(NUM > 0);
+            assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
+        }
 
-        slot.replace(this)
+        let _first = &array[0];
+        for _successive in &array[1..] {
+            debug_assert!(StaticRcRef::ptr_eq(&_first, &_successive),
+                "{:?} != {:?}", _first.pointer.as_ptr(), _successive.pointer.as_ptr());
+        }
+
+        Self { pointer: array[0].pointer, _marker: PhantomData, }
     }
 }
 
@@ -496,8 +760,8 @@ unsafe impl<'a, T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> ma
 
 unsafe impl<'a, T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync for StaticRcRef<'a, T, NUM, DEN> {}
 
-#[cfg(test)]
-mod tests {
+#[doc(hidden)]
+pub mod compile_tests {
 
 /// ```compile_fail,E0597
 /// let a = String::from("foo");
@@ -510,8 +774,6 @@ mod tests {
 /// // b is now dropped
 /// assert_ne!(a_ref, "bar");  // This should fail to compile.
 /// ```
-fn test_use_after_free() {
-    #![allow(dead_code)]
-}
+pub fn rcref_prevent_use_after_free() {}
 
-} // mod tests
+} // mod compile_tests

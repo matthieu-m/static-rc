@@ -1,4 +1,4 @@
-//  StaticRc
+//! `StaticRc` is a compile-time referenced counted heap-allocated pointer.
 
 use core::{
     any,
@@ -46,21 +46,66 @@ impl<T, const N: usize> StaticRc<T, N, N> {
     /// Constructs a new `StaticRc<T, N, N>`.
     ///
     /// This uses `Box` under the hood.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let rc = Full::new(42);
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
-    pub fn new(value: T) -> Self {
+    pub fn new(value: T) -> Self
+    where
+        AssertLeType!(1, N): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        assert!(N > 0);
+
         let pointer = NonNull::from(Box::leak(Box::new(value)));
         Self { pointer }
     }
 
     /// Constructs a new `Pin<StaticRc<T, N, N>>`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let rc = Full::pin(42);
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
-    pub fn pin(value: T) -> pin::Pin<Self> {
+    pub fn pin(value: T) -> pin::Pin<Self>
+    where
+        AssertLeType!(1, N): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        assert!(N > 0);
+
         //  Safety:
         //  -   The `value` is placed on the heap, and cannot be moved out of the heap without full ownership.
         unsafe { pin::Pin::new_unchecked(Self::new(value)) }
     }
 
     /// Returns the inner value.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let rc = Full::new(42);
+    /// assert_eq!(42, Full::into_inner(rc));
+    /// ```
     #[inline(always)]
     pub fn into_inner(this: Self) -> T {
         //  Safety:
@@ -74,6 +119,19 @@ impl<T, const N: usize> StaticRc<T, N, N> {
 
 impl<T: ?Sized, const N: usize> StaticRc<T, N, N> {
     /// Returns a mutable reference into the given `StaticRc`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let mut rc = Full::new(42);
+    /// let r: &mut i32 = Full::get_mut(&mut rc);
+    /// *r = 33;
+    /// assert_eq!(33, *rc);
+    /// ```
     #[inline(always)]
     pub fn get_mut(this: &mut Self) -> &mut T {
         //  Safety:
@@ -82,12 +140,27 @@ impl<T: ?Sized, const N: usize> StaticRc<T, N, N> {
     }
 
     /// Returns the inner value, boxed
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let mut rc = Full::new(42);
+    /// let boxed: Box<_> = Full::into_box(rc);
+    /// assert_eq!(42, *boxed);
+    /// ```
     #[inline(always)]
     pub fn into_box(this: Self) -> Box<T> {
+        let pointer = this.pointer;
+        mem::forget(this);
+
         //  Safety:
         //  -   Ratio = 1, hence full ownership.
-        //  -   `this.pointer` was allocated by Box.
-        unsafe { Box::from_raw(this.pointer.as_ptr()) }
+        //  -   `pointer` was allocated by Box.
+        unsafe { Box::from_raw(pointer.as_ptr()) }
     }
 }
 
@@ -95,17 +168,59 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// Consumes the `StaticRc`, returning the wrapped pointer.
     ///
     /// To avoid a memory leak, the pointer must be converted back to `Self` using `StaticRc::from_raw`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let rc = Full::new(42);
+    /// let leaked = Full::into_raw(rc);
+    ///
+    /// let rc = unsafe { Full::from_raw(leaked) };
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
-    pub fn into_raw(this: Self) -> NonNull<T> { this.pointer }
+    pub fn into_raw(this: Self) -> NonNull<T> {
+        let pointer = this.pointer;
+        mem::forget(this);
+
+        pointer
+    }
 
     /// Provides a raw pointer to the data.
     ///
     /// `StaticRc` is not consumed or affected in any way, the pointer is valid as long as there are shared owners of
     /// the value.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let rc = Full::new(42);
+    /// let pointer = Full::as_ptr(&rc);
+    /// assert_eq!(42, unsafe { *pointer.as_ref() });
+    /// ```
     #[inline(always)]
     pub fn as_ptr(this: &Self) -> NonNull<T> { this.pointer }
 
     /// Provides a reference to the data.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 1, 1>;
+    ///
+    /// let rc = Full::new(42);
+    /// assert_eq!(42, *Full::get_ref(&rc));
+    /// ```
     #[inline(always)]
     pub fn get_ref(this: &Self) -> &T {
         //  Safety:
@@ -115,16 +230,58 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
     /// Constructs a `StaticRc<T, NUM, DEN>` from a raw pointer.
     ///
+    /// #   Safety
+    ///
     /// The raw pointer must have been previously returned by a call to `StaticRc<U, N, D>::into_raw`:
     ///
     /// -   If `U` is different from `T`, then specific restrictions on size and alignment apply. See `mem::transmute`
     ///     for the restrictions applying to transmuting references.
     /// -   If `N / D` is different from `NUM / DEN`, then specific restrictions apply. The user is responsible for
     ///     ensuring proper management of the ratio of shares, and ultimately that the value is not dropped twice.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    /// type Half = StaticRc<i32, 1, 2>;
+    ///
+    /// let rc = Full::new(42);
+    /// let leaked = Full::into_raw(rc);
+    ///
+    /// let (one, two) = unsafe { (Half::from_raw(leaked), Half::from_raw(leaked)) };
+    /// let rc = Full::join(one, two);
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
-    pub unsafe fn from_raw(pointer: NonNull<T>) -> Self { Self { pointer } }
+    pub unsafe fn from_raw(pointer: NonNull<T>) -> Self
+    where
+        AssertLeType!(1, NUM): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        assert!(NUM > 0);
+
+        Self { pointer }
+    }
 
     /// Returns true if the two `StaticRc` point to the same allocation.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    ///
+    /// let rc = Full::new(42);
+    /// let (one, two) = Full::split::<1, 1>(rc);
+    ///
+    /// assert!(StaticRc::ptr_eq(&one, &two));
+    ///
+    /// Full::join(one, two);
+    /// ```
     #[inline(always)]
     pub fn ptr_eq<const N: usize, const D: usize>(this: &Self, other: &StaticRc<T, N, D>) -> bool {
         StaticRc::as_ptr(this) == StaticRc::as_ptr(other)
@@ -135,13 +292,30 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N / D <> NUM / DEN`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    ///
+    /// let rc = Full::new(42);
+    /// let rc = Full::adjust::<1, 1>(rc);
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
     pub fn adjust<const N: usize, const D: usize>(this: Self) -> StaticRc<T, N, D>
     where
+        AssertLeType!(1, N): Sized,
         AssertEqType!(N * DEN, NUM * D): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM * D, N * DEN, "{} / {} != {} / {}", NUM, DEN, N, D);
+        {
+            assert!(N > 0);
+            assert_eq!(NUM * D, N * DEN, "{} / {} != {} / {}", NUM, DEN, N, D);
+        }
 
         let pointer = this.pointer;
         mem::forget(this);
@@ -154,13 +328,35 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `A + B <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    /// type Half = StaticRc<i32, 1, 2>;
+    ///
+    /// let rc = Full::new(42);
+    /// let (one, two): (Half, Half) = Full::split::<1, 1>(rc);
+    ///
+    /// assert_eq!(42, *one);
+    ///
+    /// Full::join(one, two);
+    /// ```
     #[inline(always)]
     pub fn split<const A: usize, const B: usize>(this: Self) -> (StaticRc<T, A, DEN>, StaticRc<T, B, DEN>)
     where
+        AssertLeType!(1, A): Sized,
+        AssertLeType!(1, B): Sized,
         AssertEqType!(A + B, NUM): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+        {
+            assert!(A > 0);
+            assert!(B > 0);
+            assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+        }
 
         let pointer = this.pointer;
         mem::forget(this);
@@ -172,19 +368,34 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     ///
     /// #   Panics
     ///
-    /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N * DIM / D <> NUM / DEN`.
+    /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    ///
+    /// let rc = Full::new(42);
+    /// let array = Full::split_array::<1, 2>(rc);
+    ///
+    /// assert_eq!(42, *array[0]);
+    ///
+    /// Full::join_array(array);
+    /// ```
     #[inline(always)]
-    pub fn split_array<const N: usize, const D: usize, const DIM: usize>(this: Self) -> [StaticRc<T, N, D>; DIM]
+    pub fn split_array<const N: usize, const DIM: usize>(this: Self) -> [StaticRc<T, N, DEN>; DIM]
     where
-        AssertEqType!(N * DIM * DEN, NUM * D): Sized,
-        AssertLeType!(mem::size_of::<[StaticRc<T, N, D>; DIM]>(), usize::MAX / 2 + 1): Sized,
+        AssertEqType!(N * DIM, NUM ): Sized,
+        AssertLeType!(mem::size_of::<[StaticRc<T, N, DEN>; DIM]>(), usize::MAX / 2 + 1): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM * D, N * DIM * DEN, "{} * {} != {} * {} * {}", NUM, D, N, DIM, DEN);
+        assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
 
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert!(mem::size_of::<[StaticRc<T, N, D>; DIM]>() <= (isize::MAX as usize),
-            "Size of result ({}) exceeeds isize::MAX", mem::size_of::<[StaticRc<T, N, D>; DIM]>());
+        assert!(mem::size_of::<[StaticRc<T, N, DEN>; DIM]>() <= (isize::MAX as usize),
+            "Size of result ({}) exceeeds isize::MAX", mem::size_of::<[StaticRc<T, N, DEN>; DIM]>());
 
         let pointer = this.pointer;
         mem::forget(this);
@@ -196,7 +407,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
             //  -   `destination` within bounds of allocated array (< DIM).
             //  -   Offset doesn't overflow `isize`, as per array-size assertion.
             //  -   Offset doesn't wrap around, as per array-size assertion.
-            let destination = unsafe { (array.as_mut_ptr() as *mut StaticRc<T, N, D>).add(i) };
+            let destination = unsafe { (array.as_mut_ptr() as *mut StaticRc<T, N, DEN>).add(i) };
 
             //  Safety:
             //  -   `destination` is valid for writes.
@@ -216,6 +427,20 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// If the two instances do no point to the same allocation, as determined by `StaticRc::ptr_eq`.
     ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 3, 3>;
+    ///
+    /// let rc = Full::new(42);
+    /// let (one, two) = Full::split::<1, 2>(rc);
+    ///
+    /// let rc = Full::join(one, two);
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
     pub fn join<const A: usize, const B: usize>(left: StaticRc<T, A, DEN>, right: StaticRc<T, B, DEN>) -> Self
     where
@@ -239,6 +464,20 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 3, 3>;
+    ///
+    /// let rc = Full::new(42);
+    /// let (one, two) = Full::split::<1, 2>(rc);
+    ///
+    /// let rc = unsafe { Full::join_unchecked(one, two) };
+    /// assert_eq!(42, *rc);
+    /// ```
     #[inline(always)]
     pub unsafe fn join_unchecked<const A: usize, const B: usize>(
         left: StaticRc<T, A, DEN>,
@@ -250,11 +489,95 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         #[cfg(not(feature = "compile-time-ratio"))]
         assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
 
+        debug_assert!(StaticRc::ptr_eq(&left, &right), "{:?} != {:?}", left.pointer.as_ptr(), right.pointer.as_ptr());
+
         let pointer = left.pointer;
         mem::forget(left);
         mem::forget(right);
 
         Self { pointer }
+    }
+
+    /// Joins DIM instances into a single instance.
+    ///
+    /// #   Panics
+    ///
+    /// If all instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
+    ///
+    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    ///
+    /// let rc = Full::new(42);
+    /// let array = Full::split_array::<1, 2>(rc);
+    /// let rc = Full::join_array(array);
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
+    #[inline(always)]
+    pub fn join_array<const N: usize, const DIM: usize>(array: [StaticRc<T, N, DEN>; DIM]) -> Self
+    where
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
+    {
+        let first = &array[0];
+        for successive in &array[1..] {
+            assert!(StaticRc::ptr_eq(&first, &successive),
+                "{:?} != {:?}", first.pointer.as_ptr(), successive.pointer.as_ptr());
+        }
+
+        unsafe { Self::join_array_unchecked(array) }
+    }
+
+    /// Joins DIM instances into a single instance.
+    ///
+    /// #   Panics
+    ///
+    /// If all instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
+    ///
+    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    ///
+    /// let rc = Full::new(42);
+    /// let array = Full::split_array::<1, 2>(rc);
+    /// let rc = unsafe { Full::join_array_unchecked(array) };
+    ///
+    /// assert_eq!(42, *rc);
+    /// ```
+    #[inline(always)]
+    pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(array: [StaticRc<T, N, DEN>; DIM])
+        -> Self
+    where
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        {
+            assert!(NUM > 0);
+            assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
+        }
+
+        let _first = &array[0];
+        for _successive in &array[1..] {
+            debug_assert!(StaticRc::ptr_eq(&_first, &_successive),
+                "{:?} != {:?}", _first.pointer.as_ptr(), _successive.pointer.as_ptr());
+        }
+
+        let pointer = array[0].pointer;
+        mem::forget(array);
+
+        Self { pointer, }
     }
 }
 
