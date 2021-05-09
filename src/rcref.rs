@@ -394,8 +394,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// ```
     #[inline(always)]
     pub fn join<const A: usize, const B: usize>(left: StaticRcRef<'a, T, A, DEN>, right: StaticRcRef<'a, T, B, DEN>) -> Self
-    where
-        AssertEqType!(NUM, A + B): Sized,
+    //  FIXME: re-enable when compiler fixed
+    //  where
+    //      AssertEqType!(NUM, A + B): Sized,
     {
         assert!(StaticRcRef::ptr_eq(&left, &right), "{:?} != {:?}", left.pointer.as_ptr(), right.pointer.as_ptr());
 
@@ -416,6 +417,8 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
     ///
+    /// In debug, if the two instances do no point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
+    ///
     /// #   Example
     ///
     /// ```rust
@@ -435,10 +438,12 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         left: StaticRcRef<'a, T, A, DEN>,
         _right: StaticRcRef<'a, T, B, DEN>,
     ) -> Self
-    where
-        AssertEqType!(NUM, A + B): Sized,
+    //  FIXME: re-enable when compiler fixed
+    //  where
+    //      AssertEqType!(NUM, A + B): Sized,
     {
-        #[cfg(not(feature = "compile-time-ratio"))]
+        //  FIXME: re-enable when compiler fixed
+        //  #[cfg(not(feature = "compile-time-ratio"))]
         assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
 
         debug_assert!(StaticRcRef::ptr_eq(&left, &_right), "{:?} != {:?}", left.pointer.as_ptr(), _right.pointer.as_ptr());
@@ -470,9 +475,10 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// ```
     #[inline(always)]
     pub fn join_array<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM]) -> Self
-    where
-        AssertLeType!(1, NUM): Sized,
-        AssertEqType!(N * DIM, NUM): Sized,
+    //  FIXME: re-enable when compiler fixed
+    //  where
+    //      AssertLeType!(1, NUM): Sized,
+    //      AssertEqType!(N * DIM, NUM): Sized,
     {
         let first = &array[0];
         for successive in &array[1..] {
@@ -487,9 +493,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     ///
     /// #   Panics
     ///
-    /// If all instances do not point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
-    ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// In debug, if all instances do not point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
     ///
     /// #   Example
     ///
@@ -508,11 +514,13 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     #[inline(always)]
     pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM])
         -> Self
-    where
-        AssertLeType!(1, NUM): Sized,
-        AssertEqType!(N * DIM, NUM): Sized,
+    //  FIXME: re-enable when compiler fixed
+    //  where
+    //      AssertLeType!(1, NUM): Sized,
+    //      AssertEqType!(N * DIM, NUM): Sized,
     {
-        #[cfg(not(feature = "compile-time-ratio"))]
+        //  FIXME: re-enable when compiler fixed
+        //  #[cfg(not(feature = "compile-time-ratio"))]
         {
             assert!(NUM > 0);
             assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
@@ -766,7 +774,7 @@ pub mod compile_tests {
 /// ```compile_fail,E0597
 /// let a = String::from("foo");
 /// let mut a_ref = &a;
-/// let mut rc = static_rc::StaticRcRef::<_,1,1>::new(&mut a_ref);
+/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a_ref);
 /// {
 ///     let b = String::from("bar");
 ///     *rc = &b; // a_ref now points to b
@@ -777,3 +785,295 @@ pub mod compile_tests {
 pub fn rcref_prevent_use_after_free() {}
 
 } // mod compile_tests
+
+#[doc(hidden)]
+#[cfg(feature = "compile-time-ratio")]
+pub mod compile_ratio_tests {
+
+/// ```compile_fail,E0080
+/// type Zero<'a> = static_rc::StaticRcRef<'a, i32, 0, 0>;
+///
+/// let mut value = 42;
+///
+/// Zero::new(&mut value);
+/// ```
+pub fn rcref_new_zero() {}
+
+/// ```compile_fail,E0080
+/// type Zero<'a> = static_rc::StaticRcRef<'a, i32, 0, 0>;
+///
+/// let mut value = 42;
+///
+/// Zero::pin(&mut value);
+/// ```
+pub fn rcref_pin_zero() {}
+
+/// ```compile_fail,E0080
+/// type Zero<'a> = static_rc::StaticRcRef<'a, i32, 0, 0>;
+///
+/// let pointer = core::ptr::NonNull::dangling();
+///
+/// unsafe { Zero::from_raw(pointer) };
+/// ```
+pub fn rcref_from_raw_zero() {}
+
+/// ```compile_fail,E0080
+/// type One<'a> = static_rc::StaticRcRef<'a, i32, 1, 1>;
+///
+/// let mut value = 42;
+/// let rc = One::new(&mut value);
+///
+/// One::adjust::<0, 0>(rc);
+/// ```
+pub fn rcref_adjust_zero() {}
+
+/// ```compile_fail,E0080
+/// type One<'a> = static_rc::StaticRcRef<'a, i32, 1, 1>;
+///
+/// let mut value = 42;
+/// let rc = One::new(&mut value);
+///
+/// One::adjust::<2, 3>(rc);
+/// ```
+pub fn rcref_adjust_ratio() {}
+
+/// ```compile_fail,E0080
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+///
+/// Two::split::<0, 2>(rc);
+/// ```
+pub fn rcref_split_zero_first() {}
+
+/// ```compile_fail,E0080
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+///
+/// Two::split::<2, 0>(rc);
+/// ```
+pub fn rcref_split_zero_second() {}
+
+/// ```compile_fail,E0080
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+///
+/// Two::split::<1, 2>(rc);
+/// ```
+pub fn rcref_split_sum() {}
+
+/// ```compile_fail,E0080
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+///
+/// Two::split_array::<2, 2>(rc);
+/// ```
+pub fn rcref_split_array_ratio() {}
+
+//  FIXME: should be "compile_fail,E0080"
+/// ```should_panic
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+/// let (one, two) = Two::split::<1, 1>(rc);
+///
+/// static_rc::StaticRcRef::<'_, _, 1, 2>::join(one, two);
+/// ```
+pub fn rcref_join_ratio() {}
+
+//  FIXME: should be "compile_fail,E0080"
+/// ```should_panic
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+/// let (one, two) = Two::split::<1, 1>(rc);
+///
+/// unsafe { static_rc::StaticRcRef::<'_, _, 1, 2>::join_unchecked(one, two) };
+/// ```
+pub fn rcref_join_unchecked_ratio() {}
+
+//  FIXME: should be "compile_fail,E0080"
+/// ```should_panic
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+/// let array: [_; 2] = Two::split_array::<1, 2>(rc);
+///
+/// static_rc::StaticRcRef::<'_, _, 1, 2>::join_array(array);
+/// ```
+pub fn rcref_join_array_ratio() {}
+
+//  FIXME: should be "compile_fail,E0080"
+/// ```should_panic
+/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+///
+/// let mut value = 42;
+/// let rc = Two::new(&mut value);
+/// let array: [_; 2] = Two::split_array::<1, 2>(rc);
+///
+/// unsafe { static_rc::StaticRcRef::<'_, _, 1, 2>::join_array_unchecked(array) };
+/// ```
+pub fn rcref_join_array_unchecked_ratio() {}
+
+} // mod compile_ratio_tests
+
+#[cfg(all(test, not(feature = "compile-time-ratio")))]
+mod panic_ratio_tests {
+
+use super::*;
+
+type Zero<'a> = StaticRcRef<'a, i32, 0, 0>;
+type One<'a> = StaticRcRef<'a, i32, 1, 1>;
+type Two<'a> = StaticRcRef<'a, i32, 2, 2>;
+
+#[test]
+#[should_panic]
+fn rcref_new_zero() {
+    let mut value = 42;
+
+    Zero::new(&mut value);
+}
+
+#[test]
+#[should_panic]
+fn rcref_pin_zero() {
+    let mut value = 42;
+
+    Zero::pin(&mut value);
+}
+
+#[test]
+#[should_panic]
+fn rcref_from_raw_zero() {
+    let pointer = NonNull::dangling();
+
+    unsafe { Zero::from_raw(pointer) };
+}
+
+#[test]
+#[should_panic]
+fn rcref_adjust_zero() {
+    let mut value = 42;
+    let rc = One::new(&mut value);
+
+    One::adjust::<0, 0>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rcref_adjust_ratio() {
+    let mut value = 42;
+    let rc = One::new(&mut value);
+
+    One::adjust::<2, 3>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rcref_split_zero_first() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+
+    Two::split::<0, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rcref_split_zero_second() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+
+    Two::split::<0, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rcref_split_sum() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+
+    Two::split::<1, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rcref_split_array_ratio() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+
+    Two::split_array::<2, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rcref_join_ratio() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+    let (one, two) = Two::split::<1, 1>(rc);
+
+    StaticRcRef::<'_, _, 1, 2>::join(one, two);
+}
+
+#[test]
+#[should_panic]
+fn rcref_join_different() {
+    let (mut value, mut other_value) = (42, 33);
+    let (rc, other) = (Two::new(&mut value), Two::new(&mut other_value));
+    let (one, _two) = Two::split::<1, 1>(rc);
+    let (other_one, _other_two) = Two::split::<1, 1>(other);
+
+    Two::join(one, other_one);
+}
+
+#[test]
+#[should_panic]
+fn rcref_join_unchecked_ratio() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+    let (one, two) = Two::split::<1, 1>(rc);
+
+    unsafe { StaticRcRef::<'_, _, 1, 2>::join_unchecked(one, two) };
+}
+
+#[test]
+#[should_panic]
+fn rcref_join_array_ratio() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+    let array: [_; 2] = Two::split_array::<1, 2>(rc);
+
+    StaticRcRef::<'_, _, 1, 2>::join_array(array);
+}
+
+#[test]
+#[should_panic]
+fn rcref_join_array_different() {
+    let (mut value, mut other_value) = (42, 33);
+    let (rc, other) = (Two::new(&mut value), Two::new(&mut other_value));
+    let (one, _two) = Two::split::<1, 1>(rc);
+    let (other_one, _other_two) = Two::split::<1, 1>(other);
+
+    Two::join_array([one, other_one]);
+}
+
+#[test]
+#[should_panic]
+fn rcref_join_array_unchecked_ratio() {
+    let mut value = 42;
+    let rc = Two::new(&mut value);
+    let array = Two::split_array::<1, 2>(rc);
+
+    unsafe { StaticRcRef::<'_, _, 1, 2>::join_array_unchecked(array) };
+}
+
+} // mod panic_ratio_tests

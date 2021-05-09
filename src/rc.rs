@@ -446,11 +446,11 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     where
         AssertEqType!(NUM, A + B): Sized,
     {
-        assert!(StaticRc::ptr_eq(&left, &right), "{:?} != {:?}", left.pointer.as_ptr(), right.pointer.as_ptr());
+        let (left, right) = Self::validate_pair(left, right);
 
         //  Safety:
         //  -   `left` and `right` point to the same pointer.
-        unsafe { Self::join_unchecked(left, right) }
+        unsafe { Self::join_impl(left, right) }
     }
 
     /// Joins two instances into a single instance without checking whether they point to the same allocation.
@@ -464,6 +464,8 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
+    ///
+    /// In debug, if the two instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
     ///
     /// #   Example
     ///
@@ -486,16 +488,10 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     where
         AssertEqType!(NUM, A + B): Sized,
     {
-        #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+        #[cfg(debug_assertions)]
+        let (left, right) = Self::validate_pair(left, right);
 
-        debug_assert!(StaticRc::ptr_eq(&left, &right), "{:?} != {:?}", left.pointer.as_ptr(), right.pointer.as_ptr());
-
-        let pointer = left.pointer;
-        mem::forget(left);
-        mem::forget(right);
-
-        Self { pointer }
+        Self::join_impl(left, right)
     }
 
     /// Joins DIM instances into a single instance.
@@ -525,22 +521,18 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertLeType!(1, NUM): Sized,
         AssertEqType!(N * DIM, NUM): Sized,
     {
-        let first = &array[0];
-        for successive in &array[1..] {
-            assert!(StaticRc::ptr_eq(&first, &successive),
-                "{:?} != {:?}", first.pointer.as_ptr(), successive.pointer.as_ptr());
-        }
+        let array = Self::validate_array(array);
 
-        unsafe { Self::join_array_unchecked(array) }
+        unsafe { Self::join_array_impl(array) }
     }
 
     /// Joins DIM instances into a single instance.
     ///
     /// #   Panics
     ///
-    /// If all instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
-    ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
+    ///
+    /// In debug, if all instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
     ///
     /// #   Example
     ///
@@ -562,22 +554,91 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertLeType!(1, NUM): Sized,
         AssertEqType!(N * DIM, NUM): Sized,
     {
+        #[cfg(debug_assertions)]
+        let array = Self::validate_array(array);
+
+        Self::join_array_impl(array)
+    }
+
+    //  Internal; joins without validating origin.
+    #[inline(always)]
+    unsafe fn join_impl<const A: usize, const B: usize>(
+        left: StaticRc<T, A, DEN>,
+        right: StaticRc<T, B, DEN>,
+    ) -> Self
+    where
+        AssertEqType!(NUM, A + B): Sized,
+    {
         #[cfg(not(feature = "compile-time-ratio"))]
-        {
-            assert!(NUM > 0);
-            assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
+        if NUM != A + B {
+            mem::forget(left);
+            mem::forget(right);
+
+            panic!("{} != {} + {}", NUM, A, B);
         }
 
-        let _first = &array[0];
-        for _successive in &array[1..] {
-            debug_assert!(StaticRc::ptr_eq(&_first, &_successive),
-                "{:?} != {:?}", _first.pointer.as_ptr(), _successive.pointer.as_ptr());
+        let pointer = left.pointer;
+        mem::forget(left);
+        mem::forget(right);
+
+        Self { pointer }
+    }
+
+    //  Internal; joins without validating origin.
+    #[inline(always)]
+    unsafe fn join_array_impl<const N: usize, const DIM: usize>(array: [StaticRc<T, N, DEN>; DIM])
+        -> Self
+    where
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
+    {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        {
+            if NUM <= 0 {
+                mem::forget(array);
+
+                panic!("NUM <= 0");
+            }
+            if NUM != N * DIM {
+                mem::forget(array);
+
+                panic!("{} != {} * {}", NUM, N, DIM);
+            }
         }
 
         let pointer = array[0].pointer;
         mem::forget(array);
 
         Self { pointer, }
+    }
+
+    fn validate_pair<const A: usize, const B: usize>(left: StaticRc<T, A, DEN>, right: StaticRc<T, B, DEN>)
+        -> (StaticRc<T, A, DEN>, StaticRc<T, B, DEN>)
+    {
+        if StaticRc::ptr_eq(&left, &right) {
+            return (left, right);
+        }
+
+        let left = StaticRc::into_raw(left);
+        let right = StaticRc::into_raw(right);
+
+        panic!("Cannot join pair with multiple origins: {:?} != {:?}", left.as_ptr(), right.as_ptr());
+    }
+
+    fn validate_array<const N: usize, const DIM: usize>(array: [StaticRc<T, N, DEN>; DIM]) -> [StaticRc<T, N, DEN>; DIM] {
+        let first = &array[0];
+        let divergent = array[1..].iter().find(|e| !StaticRc::ptr_eq(&first, e));
+
+        if let Some(divergent) = divergent {
+            let first = first.pointer.as_ptr();
+            let divergent = divergent.pointer.as_ptr();
+
+            mem::forget(array);
+
+            panic!("Cannot join array with multiple origins: {:?} != {:?}", first, divergent);
+        }
+
+        array
     }
 }
 
@@ -641,7 +702,10 @@ impl<T: ?Sized + fmt::Debug, const NUM: usize, const DEN: usize> fmt::Debug for 
     }
 }
 
-impl<T: Default, const N: usize> Default for StaticRc<T, N, N> {
+impl<T: Default, const N: usize> Default for StaticRc<T, N, N>
+where
+    AssertLeType!(1, N): Sized,
+{
     #[inline(always)]
     fn default() -> Self { Self::new(T::default()) }
 }
@@ -912,3 +976,297 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> marker::Unpin for StaticRc<T
 unsafe impl<T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> marker::Send for StaticRc<T, NUM, DEN> {}
 
 unsafe impl<T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync for StaticRc<T, NUM, DEN> {}
+
+#[doc(hidden)]
+#[cfg(feature = "compile-time-ratio")]
+pub mod compile_ratio_tests {
+
+/// ```compile_fail,E0080
+/// type Zero = static_rc::StaticRc<i32, 0, 0>;
+///
+/// Zero::new(42);
+/// ```
+pub fn rc_new_zero() {}
+
+/// ```compile_fail,E0080
+/// type Zero = static_rc::StaticRc<i32, 0, 0>;
+///
+/// Zero::pin(42);
+/// ```
+pub fn rc_pin_zero() {}
+
+/// ```compile_fail,E0080
+/// type Zero = static_rc::StaticRc<i32, 0, 0>;
+///
+/// let pointer = core::ptr::NonNull::dangling();
+///
+/// unsafe { Zero::from_raw(pointer) };
+/// ```
+pub fn rc_from_raw_zero() {}
+
+/// ```compile_fail,E0080
+/// type One = static_rc::StaticRc<i32, 1, 1>;
+///
+/// let rc = One::new(42);
+///
+/// One::adjust::<0, 0>(rc);
+/// ```
+pub fn rc_adjust_zero() {}
+
+/// ```compile_fail,E0080
+/// type One = static_rc::StaticRc<i32, 1, 1>;
+///
+/// let rc = One::new(42);
+///
+/// One::adjust::<2, 3>(rc);
+/// ```
+pub fn rc_adjust_ratio() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+///
+/// Two::split::<0, 2>(rc);
+/// ```
+pub fn rc_split_zero_first() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+///
+/// Two::split::<2, 0>(rc);
+/// ```
+pub fn rc_split_zero_second() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+///
+/// Two::split::<1, 2>(rc);
+/// ```
+pub fn rc_split_sum() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+///
+/// Two::split_array::<2, 2>(rc);
+/// ```
+pub fn rc_split_array_ratio() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+/// let (one, two) = Two::split::<1, 1>(rc);
+///
+/// static_rc::StaticRc::<_, 1, 2>::join(one, two);
+/// ```
+pub fn rc_join_ratio() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+/// let (one, two) = Two::split::<1, 1>(rc);
+///
+/// unsafe { static_rc::StaticRc::<_, 1, 2>::join_unchecked(one, two) };
+/// ```
+pub fn rc_join_unchecked_ratio() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+/// let array: [_; 2] = Two::split_array::<1, 2>(rc);
+///
+/// static_rc::StaticRc::<_, 1, 2>::join_array(array);
+/// ```
+pub fn rc_join_array_ratio() {}
+
+/// ```compile_fail,E0080
+/// type Two = static_rc::StaticRc<i32, 2, 2>;
+///
+/// let rc = Two::new(42);
+/// let array: [_; 2] = Two::split_array::<1, 2>(rc);
+///
+/// unsafe { static_rc::StaticRc::<_, 1, 2>::join_array_unchecked(array) };
+/// ```
+pub fn rc_join_array_unchecked_ratio() {}
+
+} // mod compile_ratio_tests
+
+#[cfg(all(test, not(feature = "compile-time-ratio")))]
+mod panic_ratio_tests {
+
+use super::*;
+
+type Zero = StaticRc<i32, 0, 0>;
+type One = StaticRc<i32, 1, 1>;
+type Two = StaticRc<i32, 2, 2>;
+
+#[test]
+#[should_panic]
+fn rc_new_zero() {
+    Zero::new(42);
+}
+
+#[test]
+#[should_panic]
+fn rc_pin_zero() {
+    Zero::pin(42);
+}
+
+#[test]
+#[should_panic]
+fn rc_from_raw_zero() {
+    let pointer = NonNull::dangling();
+
+    unsafe { Zero::from_raw(pointer) };
+}
+
+#[test]
+#[should_panic]
+fn rc_adjust_zero() {
+    let rc = One::new(42);
+
+    One::adjust::<0, 0>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rc_adjust_ratio() {
+    let rc = One::new(42);
+
+    One::adjust::<2, 3>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rc_split_zero_first() {
+    let rc = Two::new(42);
+
+    Two::split::<0, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rc_split_zero_second() {
+    let rc = Two::new(42);
+
+    Two::split::<0, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rc_split_sum() {
+    let rc = Two::new(42);
+
+    Two::split::<1, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rc_split_array_ratio() {
+    let rc = Two::new(42);
+
+    Two::split_array::<2, 2>(rc);
+}
+
+#[test]
+#[should_panic]
+fn rc_join_ratio() {
+    let rc = Two::new(42);
+    will_leak(&rc);
+
+    let (one, two) = Two::split::<1, 1>(rc);
+
+    StaticRc::<_, 1, 2>::join(one, two);
+}
+
+#[test]
+#[should_panic]
+fn rc_join_different() {
+    let (rc, other) = (Two::new(42), Two::new(33));
+    will_leak(&rc);
+    will_leak(&other);
+
+    let (one, two) = Two::split::<1, 1>(rc);
+    let (other_one, other_two) = Two::split::<1, 1>(other);
+
+    mem::forget([two, other_two]);
+
+    Two::join(one, other_one);
+}
+
+#[test]
+#[should_panic]
+fn rc_join_unchecked_ratio() {
+    let rc = Two::new(42);
+    will_leak(&rc);
+
+    let (one, two) = Two::split::<1, 1>(rc);
+
+    unsafe { StaticRc::<_, 1, 2>::join_unchecked(one, two) };
+}
+
+#[test]
+#[should_panic]
+fn rc_join_array_ratio() {
+    let rc = Two::new(42);
+    will_leak(&rc);
+
+    let array: [_; 2] = Two::split_array::<1, 2>(rc);
+
+    StaticRc::<_, 1, 2>::join_array(array);
+}
+
+#[test]
+#[should_panic]
+fn rc_join_array_different() {
+    let (rc, other) = (Two::new(42), Two::new(33));
+    will_leak(&rc);
+    will_leak(&other);
+
+    let (one, two) = Two::split::<1, 1>(rc);
+    let (other_one, other_two) = Two::split::<1, 1>(other);
+
+    mem::forget([two, other_two]);
+
+    Two::join_array([one, other_one]);
+}
+
+#[test]
+#[should_panic]
+fn rc_join_array_unchecked_ratio() {
+    let rc = Two::new(42);
+    will_leak(&rc);
+
+    let array = Two::split_array::<1, 2>(rc);
+
+    unsafe { StaticRc::<_, 1, 2>::join_array_unchecked(array) };
+}
+
+//  Indicates that the pointed to memory will be leaked, to avoid it being reported.
+fn will_leak<T, const NUM: usize, const DEN: usize>(_rc: &StaticRc<T, NUM, DEN>) {
+    #[cfg(miri)]
+    {
+        unsafe { miri_static_root(StaticRc::as_ptr(_rc).as_ptr() as *const u8) };
+    }
+}
+
+#[cfg(miri)]
+extern "Rust" {
+    /// Miri-provided extern function to mark the block `ptr` points to as a "root"
+    /// for some static memory. This memory and everything reachable by it is not
+    /// considered leaking even if it still exists when the program terminates.
+    ///
+    /// `ptr` has to point to the beginning of an allocated block.
+    fn miri_static_root(ptr: *const u8);
+}
+
+} // mod panic_ratio_tests
