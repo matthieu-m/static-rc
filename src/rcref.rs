@@ -394,7 +394,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// ```
     #[inline(always)]
     pub fn join<const A: usize, const B: usize>(left: StaticRcRef<'a, T, A, DEN>, right: StaticRcRef<'a, T, B, DEN>) -> Self
-    //  FIXME: re-enable when compiler fixed
+    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertEqType!(NUM, A + B): Sized,
     {
@@ -438,11 +438,11 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         left: StaticRcRef<'a, T, A, DEN>,
         _right: StaticRcRef<'a, T, B, DEN>,
     ) -> Self
-    //  FIXME: re-enable when compiler fixed
+    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertEqType!(NUM, A + B): Sized,
     {
-        //  FIXME: re-enable when compiler fixed
+        //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
         //  #[cfg(not(feature = "compile-time-ratio"))]
         assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
 
@@ -475,7 +475,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// ```
     #[inline(always)]
     pub fn join_array<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM]) -> Self
-    //  FIXME: re-enable when compiler fixed
+    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertLeType!(1, NUM): Sized,
     //      AssertEqType!(N * DIM, NUM): Sized,
@@ -514,12 +514,12 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     #[inline(always)]
     pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM])
         -> Self
-    //  FIXME: re-enable when compiler fixed
+    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertLeType!(1, NUM): Sized,
     //      AssertEqType!(N * DIM, NUM): Sized,
     {
-        //  FIXME: re-enable when compiler fixed
+        //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
         //  #[cfg(not(feature = "compile-time-ratio"))]
         {
             assert!(NUM > 0);
