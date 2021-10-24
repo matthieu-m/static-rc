@@ -67,32 +67,6 @@ impl<'a, T: ?Sized, const N: usize> StaticRcRef<'a, T, N, N> {
         Self { pointer, _marker: PhantomData }
     }
 
-    /// Constructs a new `Pin<StaticRcRef<'a, T, N, N>>`.
-    ///
-    /// #   Example
-    ///
-    /// ```rust
-    /// use static_rc::StaticRcRef;
-    ///
-    /// type Full<'a> = StaticRcRef<'a, i32, 1, 1>;
-    ///
-    /// let mut value = 42;
-    /// let rc = Full::pin(&mut value);
-    /// assert_eq!(42, *rc);
-    /// ```
-    #[inline(always)]
-    pub fn pin(value: &'a mut T) -> pin::Pin<Self>
-    where
-        AssertLeType!(1, N): Sized,
-    {
-        #[cfg(not(feature = "compile-time-ratio"))]
-        assert!(N > 0);
-
-        //  Safety:
-        //  -   The `value` is mutably borrowed, and cannot be moved out of without full ownership.
-        unsafe { pin::Pin::new_unchecked(Self::new(value)) }
-    }
-
     /// Returns the inner value.
     ///
     /// #   Example
