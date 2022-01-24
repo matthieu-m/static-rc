@@ -640,6 +640,29 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
         array
     }
+
+    /// Stub TODO
+    #[inline(always)]
+    pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN> {
+        //  Safety:
+        //  -   The public documentation says that `StaticRcRef::from_raw`
+        //      can only be called on pointers returned from `StaticRcRef::into_raw`.
+        //      which this isn't.
+        //  -   However, internally the library knows that `rc` and `rcref` have the same invariants:
+        //      -  `this.pointer` is a valid aligned pointer into a valid value of `T`.
+        //  -   The result is only usable for lifetime `'a`, and for the duration
+        //      of the lifetime `'a` `this` is frozen.
+        //  -   `this` has NUM/DEN of the ownership. So It can lend NUM/DEN
+        //      of the right to mutate the value. Therefore, this is semantically sound
+        //      according to the general principle of this library.
+        //
+        //  `StaticRcRef::from_raw` has to have a comment documenting
+        //  internally that such a use is allowed.
+        let ptr = this.pointer;
+        unsafe {
+            super::StaticRcRef::from_raw(ptr)
+        }
+    } 
 }
 
 impl<const NUM: usize, const DEN: usize> StaticRc<dyn any::Any, NUM, DEN> {

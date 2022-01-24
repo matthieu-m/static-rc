@@ -207,6 +207,8 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     ///     for the restrictions applying to transmuting references.
     /// -   If `N / D` is different from `NUM / DEN`, then specific restrictions apply. The user is responsible for
     ///     ensuring proper management of the ratio of shares, and ultimately that the value is not dropped twice.
+    //  Internal comment: Internally, calling `from_raw` in the specific case of `StaticRc::as_rcref`
+    //  is allowed. This isn't allowed as an external user of the library.
     #[inline(always)]
     pub unsafe fn from_raw(pointer: NonNull<T>) -> Self
     where
