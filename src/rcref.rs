@@ -181,6 +181,8 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     ///     for the restrictions applying to transmuting references.
     /// -   If `N / D` is different from `NUM / DEN`, then specific restrictions apply. The user is responsible for
     ///     ensuring proper management of the ratio of shares, and ultimately that the value is not dropped twice.
+    //  Internal comment: Internally, calling `from_raw` in the specific case of `StaticRc::as_rcref`
+    //  is allowed. This isn't allowed as an external user of the library.
     #[inline(always)]
     pub unsafe fn from_raw(pointer: NonNull<T>) -> Self
     where
@@ -244,6 +246,44 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         }
 
         StaticRcRef { pointer: this.pointer, _marker: PhantomData }
+    }
+
+    /// Reborrows into another [`StaticRcRef`].
+    /// 
+    /// The current instance is mutably borrowed for the duration the result can be used.
+    /// 
+    /// #   Example
+    /// 
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    /// let mut x = 5;
+    /// let rc_full: StaticRcRef<i32, 2, 2> = StaticRcRef::new(&mut x);
+    /// let (mut rc1, mut rc2) = StaticRcRef::split::<1, 1>(rc_full);
+    /// {
+    ///     // Modify without moving `rc1`, `rc2`.
+    ///     let rc_borrow1 = StaticRcRef::reborrow(&mut rc1);
+    ///     let rc_borrow2 = StaticRcRef::reborrow(&mut rc2);
+    ///     let mut rcref_full: StaticRcRef<_, 2, 2> = StaticRcRef::join(rc_borrow1, rc_borrow2);
+    ///     *rcref_full = 9;
+    ///     // Reborrow ends, can use the original refs again
+    /// }
+    /// let rc_full: StaticRcRef<_, 2, 2> = StaticRcRef::join(rc1, rc2);
+    /// assert_eq!(*rc_full, 9);
+    /// assert_eq!(x, 9);
+    /// ```
+    #[inline(always)]
+    pub fn reborrow<'reborrow>(this: &'reborrow mut Self) -> StaticRcRef<'reborrow, T, NUM, DEN> {
+        //  Safety (even though this doesn't use the `unsafe` keyword):
+        //  -  `this.pointer` is a valid aligned pointer into a valid value of `T`.
+        //  -   The result is only usable for lifetime `'a`, and for the duration
+        //      of the lifetime `'a` `this` is mutably borrowed.
+        //  -   `this` has NUM/DEN of the right to mutate the value. So it can lend NUM/DEN
+        //      of the right to mutate the value. Therefore, this is semantically sound
+        //      according to the general principle of this library.
+        StaticRcRef {
+            pointer: this.pointer,
+            _marker: PhantomData::default(),
+        }
     }
 
     /// Splits the current instance into two instances with the specified NUMerators.
@@ -508,6 +548,8 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
 
         Self { pointer: array[0].pointer, _marker: PhantomData, }
     }
+
+    
 }
 
 impl<'a, const NUM: usize, const DEN: usize> StaticRcRef<'a, dyn any::Any, NUM, DEN> {
@@ -757,6 +799,26 @@ pub mod compile_tests {
 /// assert_ne!(a_ref, "bar");  // This should fail to compile.
 /// ```
 pub fn rcref_prevent_use_after_free() {}
+
+/// ```compile_fail,E0505
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
+/// 
+/// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
+/// std::mem::drop(rc);
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rcref_reborrow_and_move() {}
+
+/// ```compile_fail,E0502
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
+/// 
+/// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
+/// assert_eq!(*rc, "foo");
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rcref_reborrow_and_use() {}
 
 } // mod compile_tests
 

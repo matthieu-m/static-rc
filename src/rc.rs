@@ -323,6 +323,53 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         StaticRc { pointer }
     }
 
+    /// Converts an instance into a [`StaticRcRef`](super::StaticRcRef).
+    /// 
+    /// The current instance is mutably borrowed for the duration the result can be used.
+    /// 
+    /// #   Example
+    ///   
+    /// ```rust
+    /// use static_rc::StaticRc;
+    /// use static_rc::StaticRcRef;
+    /// let rc: StaticRc<_, 2, 2> = StaticRc::new(5);
+    /// let (mut rc1, mut rc2) = StaticRc::split::<1, 1>(rc);
+    /// {
+    ///     // Modify without moving `rc1`, `rc2`.
+    ///     let rcref1 = StaticRc::as_rcref(&mut rc1);
+    ///     let rcref2 = StaticRc::as_rcref(&mut rc2);
+    ///     let mut rcref_owning: StaticRcRef<_, 2, 2> = StaticRcRef::join(rcref1, rcref2);
+    ///     *rcref_owning = 9;
+    ///     // Refs not used anymore, original rcs can be used again
+    /// }
+    /// let rc: StaticRc<_, 2, 2> = StaticRc::join(rc1, rc2);
+    /// assert_eq!(*rc, 9);
+    /// assert_eq!(*StaticRc::into_box(rc), 9);
+    /// ```
+    #[inline(always)]
+    pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN> {
+        //  Safety:
+        //  -   The public documentation says that `StaticRcRef::from_raw`
+        //      can only be called on pointers returned from `StaticRcRef::into_raw`.
+        //      which this isn't.
+        //  -   However, internally the library knows that `rc` and `rcref` have the same invariants:
+        //      -  `this.pointer` is a valid aligned pointer into a valid value of `T`.
+        //  -   The result is only usable for lifetime `'a`, and for the duration
+        //      of the lifetime `'a` `this` is mutably borrowed.
+        //  -   `this` has NUM/DEN of the ownership. So it can lend NUM/DEN
+        //      of the right to mutate the value. Therefore, this is semantically sound
+        //      according to the general principle of this library.
+        //
+        //  This is safe for generally the same reason `StaticRcRef::reborrow` is safe.
+        //
+        //  `StaticRcRef::from_raw` has to have a comment documenting
+        //  internally that such a use is allowed.
+        let ptr = this.pointer;
+        unsafe {
+            super::StaticRcRef::from_raw(ptr)
+        }
+    }
+
     /// Splits the current instance into two instances with the specified NUMerators.
     ///
     /// #   Panics
@@ -639,7 +686,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         }
 
         array
-    }
+    } 
 }
 
 impl<const NUM: usize, const DEN: usize> StaticRc<dyn any::Any, NUM, DEN> {
@@ -976,6 +1023,31 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> marker::Unpin for StaticRc<T
 unsafe impl<T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> marker::Send for StaticRc<T, NUM, DEN> {}
 
 unsafe impl<T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync for StaticRc<T, NUM, DEN> {}
+
+#[doc(hidden)]
+pub mod compile_tests {
+
+/// ```compile_fail,E0505
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRc::<_,1,1>::new(a);
+/// 
+/// let mut reborrow = static_rc::StaticRc::as_rcref(&mut rc);
+/// std::mem::drop(rc);
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rc_reborrow_and_move() {}
+
+/// ```compile_fail,E0502
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRc::<_,1,1>::new(a);
+/// 
+/// let mut reborrow = static_rc::StaticRc::as_rcref(&mut rc);
+/// assert_eq!(*rc, "foo");
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rc_reborrow_and_use() {}
+
+} // mod compile_tests
 
 #[doc(hidden)]
 #[cfg(feature = "compile-time-ratio")]
