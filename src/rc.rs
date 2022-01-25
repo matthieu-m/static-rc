@@ -652,9 +652,11 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         //      -  `this.pointer` is a valid aligned pointer into a valid value of `T`.
         //  -   The result is only usable for lifetime `'a`, and for the duration
         //      of the lifetime `'a` `this` is frozen.
-        //  -   `this` has NUM/DEN of the ownership. So It can lend NUM/DEN
+        //  -   `this` has NUM/DEN of the ownership. So it can lend NUM/DEN
         //      of the right to mutate the value. Therefore, this is semantically sound
         //      according to the general principle of this library.
+        //
+        //  This is safe for generally the same reason `StaticRcRef::reborrow` is safe.
         //
         //  `StaticRcRef::from_raw` has to have a comment documenting
         //  internally that such a use is allowed.

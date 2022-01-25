@@ -536,6 +536,22 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
 
         Self { pointer: array[0].pointer, _marker: PhantomData, }
     }
+
+    /// Stub TODO
+    #[inline(always)]
+    pub fn reborrow<'reborrow>(this: &'reborrow mut Self) -> StaticRcRef<'reborrow, T, NUM, DEN> {
+        //  Safety (even though this doesn't use the `unsafe` keyword):
+        //  -  `this.pointer` is a valid aligned pointer into a valid value of `T`.
+        //  -   The result is only usable for lifetime `'a`, and for the duration
+        //      of the lifetime `'a` `this` is frozen.
+        //  -   `this` has NUM/DEN of the right to mutate the value. So it can lend NUM/DEN
+        //      of the right to mutate the value. Therefore, this is semantically sound
+        //      according to the general principle of this library.
+        StaticRcRef {
+            pointer: this.pointer,
+            _marker: PhantomData::default(),
+        }
+    }
 }
 
 impl<'a, const NUM: usize, const DEN: usize> StaticRcRef<'a, dyn any::Any, NUM, DEN> {
