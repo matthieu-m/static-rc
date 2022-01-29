@@ -537,7 +537,25 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         Self { pointer: array[0].pointer, _marker: PhantomData, }
     }
 
-    /// Stub TODO
+    /// Reborrows into another [`StaticRcRef`].
+    /// The current instance is frozen for the duration the result can be used.
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    /// let mut x = 5;
+    /// let rc_full: StaticRcRef<i32, 2, 2> = StaticRcRef::new(&mut x);
+    /// let (mut rc1, mut rc2) = StaticRcRef::split::<1, 1>(rc_full);
+    /// {
+    ///     // Modify without moving `rc1`, `rc2`.
+    ///     let rc_borrow1 = StaticRcRef::reborrow(&mut rc1);
+    ///     let rc_borrow2 = StaticRcRef::reborrow(&mut rc2);
+    ///     let mut rcref_full: StaticRcRef<_, 2, 2> = StaticRcRef::join(rc_borrow1, rc_borrow2);
+    ///     *rcref_full = 9;
+    ///     // Reborrow ends, can use the original refs again
+    /// }
+    /// let rc_full: StaticRcRef<_, 2, 2> = StaticRcRef::join(rc1, rc2);
+    /// assert_eq!(*rc_full, 9);
+    /// assert_eq!(x, 9);
+    /// ```
     #[inline(always)]
     pub fn reborrow<'reborrow>(this: &'reborrow mut Self) -> StaticRcRef<'reborrow, T, NUM, DEN> {
         //  Safety (even though this doesn't use the `unsafe` keyword):

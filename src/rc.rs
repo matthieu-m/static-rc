@@ -641,7 +641,25 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         array
     }
 
-    /// Stub TODO
+    /// Converts an instance into a [`StaticRcRef`](super::StaticRcRef).
+    /// The current instance is frozen for the duration the result can be used.
+    /// ```rust
+    /// use static_rc::StaticRc;
+    /// use static_rc::StaticRcRef;
+    /// let rc: StaticRc<_, 2, 2> = StaticRc::new(5);
+    /// let (mut rc1, mut rc2) = StaticRc::split::<1, 1>(rc);
+    /// {
+    ///     // Modify without moving `rc1`, `rc2`.
+    ///     let rcref1 = StaticRc::as_rcref(&mut rc1);
+    ///     let rcref2 = StaticRc::as_rcref(&mut rc2);
+    ///     let mut rcref_owning: StaticRcRef<_, 2, 2> = StaticRcRef::join(rcref1, rcref2);
+    ///     *rcref_owning = 9;
+    ///     // Refs not used anymore, original rcs can be used again
+    /// }
+    /// let rc: StaticRc<_, 2, 2> = StaticRc::join(rc1, rc2);
+    /// assert_eq!(*rc, 9);
+    /// assert_eq!(*StaticRc::into_box(rc), 9);
+    /// ```
     #[inline(always)]
     pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN> {
         //  Safety:
