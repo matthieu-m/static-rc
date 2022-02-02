@@ -826,6 +826,26 @@ pub mod compile_tests {
 /// ```
 pub fn rcref_prevent_use_after_free() {}
 
+/// ```compile_fail,E0505
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
+/// 
+/// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
+/// std::mem::drop(rc);
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rcref_reborrow_and_move() {}
+
+/// ```compile_fail,E0502
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
+/// 
+/// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
+/// assert_eq!(*rc, "foo");
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rcref_reborrow_and_use() {}
+
 } // mod compile_tests
 
 #[doc(hidden)]

@@ -1025,6 +1025,31 @@ unsafe impl<T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> marker
 unsafe impl<T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync for StaticRc<T, NUM, DEN> {}
 
 #[doc(hidden)]
+pub mod compile_tests {
+
+/// ```compile_fail,E0505
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRc::<_,1,1>::new(a);
+/// 
+/// let mut reborrow = static_rc::StaticRc::as_rcref(&mut rc);
+/// std::mem::drop(rc);
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rc_reborrow_and_move() {}
+
+/// ```compile_fail,E0502
+/// let mut a = String::from("foo");
+/// let mut rc = static_rc::StaticRc::<_,1,1>::new(a);
+/// 
+/// let mut reborrow = static_rc::StaticRc::as_rcref(&mut rc);
+/// assert_eq!(*rc, "foo");
+/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+/// ```
+pub fn rc_reborrow_and_use() {}
+
+} // mod compile_tests
+
+#[doc(hidden)]
 #[cfg(feature = "compile-time-ratio")]
 pub mod compile_ratio_tests {
 
