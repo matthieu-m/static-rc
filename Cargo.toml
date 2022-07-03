@@ -24,9 +24,9 @@ alloc = []
 #   Enables `lift`, an experimental feature to allow tying the knot.
 experimental-lift = []
 
-#   Enables `Stream` on `StaticRc`.
-#   This currently requires nightly, and specifically the `async_stream` feature.
-nightly-async-stream = []
+#   Enables `AsyncIterator` on `StaticRc`.
+#   This currently requires nightly, and specifically the `async_iterator` feature.
+nightly-async-iterator = []
 
 #   Enables `CoerceUnsized` on `StaticRc`.
 #   This currently requires nightly, and specifically the `coerce_unsized` feature.

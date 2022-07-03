@@ -17,8 +17,8 @@ use core::{
     task,
 };
 
-#[cfg(feature = "nightly-async-stream")]
-use core::stream;
+#[cfg(feature = "nightly-async-iterator")]
+use core::async_iter;
 
 #[cfg(feature = "nightly-coerce-unsized")]
 use core::ops::CoerceUnsized;
@@ -767,8 +767,8 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> fmt::Pointer for StaticR
     }
 }
 
-#[cfg(feature = "nightly-async-stream")]
-impl<'a, S: ?Sized + stream::Stream + marker::Unpin, const N: usize> stream::Stream for StaticRcRef<'a, S, N, N> {
+#[cfg(feature = "nightly-async-iterator")]
+impl<'a, S: ?Sized + async_iter::AsyncIterator + marker::Unpin, const N: usize> async_iter::AsyncIterator for StaticRcRef<'a, S, N, N> {
     type Item = S::Item;
 
     fn poll_next(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Option<Self::Item>> {
