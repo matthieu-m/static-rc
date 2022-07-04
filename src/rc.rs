@@ -19,8 +19,8 @@ use core::{
 
 use alloc::boxed::Box;
 
-#[cfg(feature = "nightly-async-stream")]
-use core::stream;
+#[cfg(feature = "nightly-async-iterator")]
+use core::async_iter;
 
 #[cfg(feature = "nightly-coerce-unsized")]
 use core::ops::CoerceUnsized;
@@ -347,7 +347,10 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// assert_eq!(*StaticRc::into_box(rc), 9);
     /// ```
     #[inline(always)]
-    pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN> {
+    pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN> 
+    where
+        AssertLeType!(1, NUM): Sized,
+    {
         //  Safety:
         //  -   The public documentation says that `StaticRcRef::from_raw`
         //      can only be called on pointers returned from `StaticRcRef::into_raw`.
@@ -1007,8 +1010,8 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> fmt::Pointer for StaticRc<T,
     }
 }
 
-#[cfg(feature = "nightly-async-stream")]
-impl<S: ?Sized + stream::Stream + marker::Unpin, const N: usize> stream::Stream for StaticRc<S, N, N> {
+#[cfg(feature = "nightly-async-iterator")]
+impl<S: ?Sized + async_iter::AsyncIterator + marker::Unpin, const N: usize> async_iter::AsyncIterator for StaticRc<S, N, N> {
     type Item = S::Item;
 
     fn poll_next(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Option<Self::Item>> {

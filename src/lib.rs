@@ -56,8 +56,8 @@
 
 //  Nightly features
 #![cfg_attr(feature = "compile-time-ratio", allow(incomplete_features))]
-#![cfg_attr(feature = "compile-time-ratio", feature(const_generics, const_evaluatable_checked))]
-#![cfg_attr(feature = "nightly-async-stream", feature(async_stream))]
+#![cfg_attr(feature = "compile-time-ratio", feature(generic_const_exprs))]
+#![cfg_attr(feature = "nightly-async-iterator", feature(async_iterator))]
 #![cfg_attr(feature = "nightly-coerce-unsized", feature(coerce_unsized))]
 #![cfg_attr(feature = "nightly-dispatch-from-dyn", feature(dispatch_from_dyn))]
 #![cfg_attr(any(feature = "nightly-dispatch-from-dyn", feature = "nightly-coerce-unsized"), feature(unsize))]
