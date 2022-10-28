@@ -28,12 +28,11 @@ where
     let root = ManuallyDrop::new(root);
     let slot = fun(&root) as *mut R as *mut ManuallyDrop<R>;
 
-    debug_assert_ne!(slot as *const _, &root as *const _);
-
     //  Safety:
     //  -   `root` is still alive, hence any reference linked to `root` is _also_ alive.
-    //  -   `slot` is necessarily different from `root`, being mutable.
-    unsafe { replace(slot, root) }
+    //  -   `root` is valid for reads.
+    //  -   `slot` is valid for reads & writes.
+    unsafe { replace(slot, &root as *const _) }
 }
 
 /// Lifts `root` into the slot provided by `fun`; returns the previous value of the slot, if any.
@@ -54,12 +53,11 @@ where
     let root = ManuallyDrop::new(root);
     let slot = fun(&root, extra) as *mut R as *mut ManuallyDrop<R>;
 
-    debug_assert_ne!(slot as *const _, &root as *const _);
-
     //  Safety:
     //  -   `root` is still alive, hence any reference linked to `root` is _also_ alive.
-    //  -   `slot` is necessarily different from `root`, being mutable.
-    unsafe { replace(slot, root) }
+    //  -   `root` is valid for reads.
+    //  -   `slot` is valid for reads & writes.
+    unsafe { replace(slot, &root as *const _) }
 }
 
 /// Lifts `root` into the slot provided by `fun`; returns the previous value of the slot, if any.
@@ -80,24 +78,25 @@ where
     let root = ManuallyDrop::new(root);
     let slot = fun(&root, extra) as *mut R as *mut ManuallyDrop<R>;
 
-    debug_assert_ne!(slot as *const _, &root as *const _);
-
     //  Safety:
     //  -   `root` is still alive, hence any reference linked to `root` is _also_ alive.
-    //  -   `slot` is necessarily different from `root`, being mutable.
-    unsafe { replace(slot, root) }
+    //  -   `root` is valid for reads.
+    //  -   `slot` is valid for reads & writes.
+    unsafe { replace(slot, &root as *const _) }
 }
 
 //  Replaces the content of `dest` with that of `src`, returns the content of `dest`.
 //
 //  #   Safety
 //
-//  -   `dest` points to an initialized value.
-//  -   `src` is an initialized value.
-unsafe fn replace<T>(dest: *mut ManuallyDrop<T>, src: ManuallyDrop<T>) -> T {
+//  -   `dest` is valid for both reads and writes.
+//  -   `src` is valid for reads.
+//
+//  It is perfectly safe for `src` and `dest` to alias.
+unsafe fn replace<T>(dest: *mut ManuallyDrop<T>, src: *const ManuallyDrop<T>) -> T {
     //  Swap, manually.
     let result = ptr::read(dest);
-    ptr::copy(&src as *const _, dest, 1);
+    ptr::copy(src, dest, 1);
 
     ManuallyDrop::into_inner(result)
 }
@@ -105,9 +104,43 @@ unsafe fn replace<T>(dest: *mut ManuallyDrop<T>, src: ManuallyDrop<T>) -> T {
 #[cfg(test)]
 mod tests {
 
-use std::cell;
+use std::{cell, mem};
 
 use super::*;
+
+//  Example from https://github.com/matthieu-m/static-rc/issues/14 by @noamtashma.
+//
+//  Using `UnsafeCell` instead of `GhostCell` to avoid 3rd-party dependency.
+fn lift_self_impl(cell_ref: &cell::UnsafeCell<Box<i32>>) -> &mut cell::UnsafeCell<Box<i32>> {
+    //  cell_ref.borrow_mut(token) with GhostCell.
+    let borrowed: &mut Box<i32> = unsafe { &mut *cell_ref.get() };
+
+    //  GhostCell::from_mut
+    let transmuted: &mut cell::UnsafeCell<Box<i32>> = unsafe { mem::transmute(borrowed) };
+
+    transmuted
+}
+
+#[test]
+fn lift_self() {
+    let cell = cell::UnsafeCell::new(Box::new(7));
+
+    lift(cell, lift_self_impl);
+}
+
+#[test]
+fn lift_with_self() {
+    let cell = cell::UnsafeCell::new(Box::new(7));
+
+    lift_with(cell, &(), |cell_ref, _| lift_self_impl(cell_ref));
+}
+
+#[test]
+fn lift_with_mut_self() {
+    let cell = cell::UnsafeCell::new(Box::new(7));
+
+    lift_with_mut(cell, &mut (), |cell_ref, _| lift_self_impl(cell_ref));
+}
 
 //  Example from https://users.rust-lang.org/t/can-you-break-the-lift/58858/19 by @steffahn.
 //
