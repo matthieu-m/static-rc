@@ -340,7 +340,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// assert_eq!(*StaticRc::into_box(rc), 9);
     /// ```
     #[inline(always)]
-    pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN>
+    pub fn as_rcref(this: &mut Self) -> super::StaticRcRef<T, NUM, DEN>
     where
         AssertLeType!(1, NUM): Sized,
     {
@@ -509,17 +509,10 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
     /// Joins two instances into a single instance without checking whether they point to the same allocation.
     ///
-    /// Unless `compile-time-ratio` is activated, the ratios are checked nevertheless.
-    ///
     /// # Safety
     ///
-    /// The caller must guarantee that those instances point to the same allocation.
-    ///
-    /// #   Panics
-    ///
-    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
-    ///
-    /// In debug, if the two instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
+    /// The left instance is kept while the right instance is forgotten. This method is behaves the same as calling
+    /// `core::mem::forget` on the right instance and `StaticRc::transmute` on the left instance.
     ///
     /// #   Example
     ///
@@ -542,9 +535,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     where
         AssertEqType!(NUM, A + B): Sized,
     {
-        #[cfg(debug_assertions)]
-        let (left, right) = Self::validate_pair(left, right);
-
         Self::join_impl(left, right)
     }
 
@@ -582,11 +572,10 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
     /// Joins DIM instances into a single instance.
     ///
-    /// #   Panics
+    /// #   Safety
     ///
-    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
-    ///
-    /// In debug, if all instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
+    /// The first instance is kept while the others are forgotten. This method is behaves the same as calling
+    /// `core::mem::forget` on the other instances and `StaticRc::transmute` on the first instance.
     ///
     /// #   Example
     ///
@@ -609,13 +598,48 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertLeType!(1, NUM): Sized,
         AssertEqType!(N * DIM, NUM): Sized,
     {
-        #[cfg(debug_assertions)]
-        let array = Self::validate_array(array);
-
         Self::join_array_impl(array)
     }
 
-    //  Internal; joins without validating origin.
+    /// Transmute the instance to a different type.
+    ///
+    /// #  Safety
+    ///
+    /// The caller must guarantee that new count is correct.
+    ///
+    /// Under counting will lead to memory leaks, over counting will lead to double frees (undefined behavior).
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRc;
+    ///
+    /// type Full = StaticRc<i32, 2, 2>;
+    /// type Half = StaticRc<i32, 1, 2>;
+    /// type Single = StaticRc<i32, 1, 1>;
+    ///
+    /// let rc = Full::new(42);
+    /// let (left, right): (Half, Half) = Full::split(rc);
+    ///
+    /// // Forget the left instance
+    /// core::mem::forget(left);
+    ///
+    /// // SAFETY: The right instance is now the only owner of the allocation.
+    /// let rc: Single = unsafe { Half::transmute(right) };
+    ///
+    /// assert_eq!(42, Single::into_inner(rc));
+    /// ```
+    #[inline(always)]
+    pub unsafe fn transmute<const A: usize, const B: usize>(self) -> StaticRc<T, A, B> {
+        let pointer = self.pointer;
+        mem::forget(self);
+        StaticRc { pointer }
+    }
+
+    // Internal; joins without validating origin.
+    //
+    // NOTE: The left pointer must be used, and the right pointer is forgotten.
+    // Changing this behavior is a major breaking change.
     #[inline(always)]
     unsafe fn join_impl<const A: usize, const B: usize>(
         left: StaticRc<T, A, DEN>,
@@ -650,7 +674,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     {
         #[cfg(not(feature = "compile-time-ratio"))]
         {
-            if NUM <= 0 {
+            if NUM == 0 {
                 mem::forget(array);
 
                 panic!("NUM <= 0");
@@ -690,7 +714,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         array: [StaticRc<T, N, DEN>; DIM],
     ) -> [StaticRc<T, N, DEN>; DIM] {
         let first = &array[0];
-        let divergent = array[1..].iter().find(|e| !StaticRc::ptr_eq(&first, e));
+        let divergent = array[1..].iter().find(|e| !StaticRc::ptr_eq(first, e));
 
         if let Some(divergent) = divergent {
             let first = first.pointer.as_ptr();
@@ -1066,11 +1090,6 @@ where
     #[inline(always)]
     fn eq(&self, other: &StaticRc<T, N, D>) -> bool {
         Self::get_ref(self).eq(StaticRc::get_ref(other))
-    }
-
-    #[inline(always)]
-    fn ne(&self, other: &StaticRc<T, N, D>) -> bool {
-        Self::get_ref(self).ne(StaticRc::get_ref(other))
     }
 }
 
