@@ -100,8 +100,7 @@ unsafe fn replace<T>(dest: *mut ManuallyDrop<T>, src: *const ManuallyDrop<T>) ->
 
 #[cfg(test)]
 mod tests {
-
-    use std::{cell, mem};
+    use core::{cell, mem};
 
     use super::*;
 

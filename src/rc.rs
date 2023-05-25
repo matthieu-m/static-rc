@@ -1169,7 +1169,7 @@ pub mod compile_tests {
     /// let mut rc = static_rc::StaticRc::<_,1,1>::new(a);
     ///
     /// let mut reborrow = static_rc::StaticRc::as_rcref(&mut rc);
-    /// std::mem::drop(rc);
+    /// core::mem::drop(rc);
     /// assert_eq!(*reborrow, "foo"); // This should fail to compile.
     /// ```
     pub fn rc_reborrow_and_move() {}
