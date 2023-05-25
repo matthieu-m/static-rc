@@ -174,6 +174,8 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
 
     /// Constructs a `StaticRcRef<'a, T, NUM, DEN>` from a raw pointer.
     ///
+    /// #  Safety
+    ///
     /// The raw pointer must have been previously returned by a call to `StaticRcRef<'a, U, N, D>::into_raw`:
     ///
     /// -   If `U` is different from `T`, then specific restrictions on size and alignment apply. See `mem::transmute`
@@ -280,7 +282,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(x, 9);
     /// ```
     #[inline(always)]
-    pub fn reborrow<'reborrow>(this: &'reborrow mut Self) -> StaticRcRef<'reborrow, T, NUM, DEN> {
+    pub fn reborrow(this: &mut Self) -> StaticRcRef<T, NUM, DEN> {
         //  Safety (even though this doesn't use the `unsafe` keyword):
         //  -  `this.pointer` is a valid aligned pointer into a valid value of `T`.
         //  -   The result is only usable for lifetime `'a`, and for the duration
@@ -290,7 +292,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         //      according to the general principle of this library.
         StaticRcRef {
             pointer: this.pointer,
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
 
@@ -434,10 +436,14 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         left: StaticRcRef<'a, T, A, DEN>,
         right: StaticRcRef<'a, T, B, DEN>,
     ) -> Self
-//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-    //  where
-    //      AssertEqType!(NUM, A + B): Sized,
+    where
+        AssertEqType!(NUM, A + B): Sized,
     {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        {
+            assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+        }
+
         assert!(
             StaticRcRef::ptr_eq(&left, &right),
             "{:?} != {:?}",
@@ -452,11 +458,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
 
     /// Joins two instances into a single instance without checking whether they point to the same allocation.
     ///
-    /// Unless `compile-time-ratio` is activated, the ratios are checked nevertheless.
-    ///
     /// # Safety
     ///
-    /// The caller must guarantee that those instances point to the same allocation.
+    /// Only the left instance is used to determine the allocation. The right instance is forgotten.
     ///
     /// #   Panics
     ///
@@ -483,20 +487,11 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         left: StaticRcRef<'a, T, A, DEN>,
         _right: StaticRcRef<'a, T, B, DEN>,
     ) -> Self
-//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-    //  where
-    //      AssertEqType!(NUM, A + B): Sized,
+    where
+        AssertEqType!(NUM, A + B): Sized,
     {
-        //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-        //  #[cfg(not(feature = "compile-time-ratio"))]
+        #[cfg(not(feature = "compile-time-ratio"))]
         assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
-
-        debug_assert!(
-            StaticRcRef::ptr_eq(&left, &_right),
-            "{:?} != {:?}",
-            left.pointer.as_ptr(),
-            _right.pointer.as_ptr()
-        );
 
         Self {
             pointer: left.pointer,
@@ -530,15 +525,19 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     pub fn join_array<const N: usize, const DIM: usize>(
         array: [StaticRcRef<'a, T, N, DEN>; DIM],
     ) -> Self
-//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-    //  where
-    //      AssertLeType!(1, NUM): Sized,
-    //      AssertEqType!(N * DIM, NUM): Sized,
+    where
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
     {
+        #[cfg(not(feature = "compile-time-ratio"))]
+        {
+            assert_eq!(N * DIM, NUM, "{} != {} * {}", NUM, N, DIM);
+        }
+
         let first = &array[0];
         for successive in &array[1..] {
             assert!(
-                StaticRcRef::ptr_eq(&first, &successive),
+                StaticRcRef::ptr_eq(first, successive),
                 "{:?} != {:?}",
                 first.pointer.as_ptr(),
                 successive.pointer.as_ptr()
@@ -550,11 +549,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
 
     /// Joins DIM instances into a single instance.
     ///
-    /// #   Panics
+    /// #   Safety
     ///
-    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
-    ///
-    /// In debug, if all instances do not point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
+    /// Only the first instance is used to determine the allocation. The other instances are forgotten.
     ///
     /// #   Example
     ///
@@ -574,26 +571,13 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(
         array: [StaticRcRef<'a, T, N, DEN>; DIM],
     ) -> Self
-//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-    //  where
-    //      AssertLeType!(1, NUM): Sized,
-    //      AssertEqType!(N * DIM, NUM): Sized,
+    where
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
     {
-        //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-        //  #[cfg(not(feature = "compile-time-ratio"))]
+        #[cfg(not(feature = "compile-time-ratio"))]
         {
-            assert!(NUM > 0);
-            assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
-        }
-
-        let _first = &array[0];
-        for _successive in &array[1..] {
-            debug_assert!(
-                StaticRcRef::ptr_eq(&_first, &_successive),
-                "{:?} != {:?}",
-                _first.pointer.as_ptr(),
-                _successive.pointer.as_ptr()
-            );
+            assert_eq!(N * DIM, NUM, "{} != {} * {}", NUM, N, DIM);
         }
 
         Self {
@@ -851,11 +835,6 @@ where
     fn eq(&self, other: &StaticRcRef<'a, T, N, D>) -> bool {
         Self::get_ref(self).eq(StaticRcRef::get_ref(other))
     }
-
-    #[inline(always)]
-    fn ne(&self, other: &StaticRcRef<'a, T, N, D>) -> bool {
-        Self::get_ref(self).ne(StaticRcRef::get_ref(other))
-    }
 }
 
 impl<'a, T, const NUM: usize, const DEN: usize, const N: usize, const D: usize>
@@ -1050,8 +1029,7 @@ pub mod compile_ratio_tests {
     /// ```
     pub fn rcref_split_array_ratio() {}
 
-    //  FIXME: should be "compile_fail,E0080"
-    /// ```should_panic
+    /// ```compile_fail,E0080
     /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
     ///
     /// let mut value = 42;
@@ -1062,8 +1040,7 @@ pub mod compile_ratio_tests {
     /// ```
     pub fn rcref_join_ratio() {}
 
-    //  FIXME: should be "compile_fail,E0080"
-    /// ```should_panic
+    /// ```compile_fail,E0080
     /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
     ///
     /// let mut value = 42;
@@ -1074,8 +1051,7 @@ pub mod compile_ratio_tests {
     /// ```
     pub fn rcref_join_unchecked_ratio() {}
 
-    //  FIXME: should be "compile_fail,E0080"
-    /// ```should_panic
+    /// ```compile_fail,E0080
     /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
     ///
     /// let mut value = 42;
@@ -1086,8 +1062,7 @@ pub mod compile_ratio_tests {
     /// ```
     pub fn rcref_join_array_ratio() {}
 
-    //  FIXME: should be "compile_fail,E0080"
-    /// ```should_panic
+    /// ```compile_fail,E0080
     /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
     ///
     /// let mut value = 42;
@@ -1107,6 +1082,7 @@ mod panic_ratio_tests {
     type Zero<'a> = StaticRcRef<'a, i32, 0, 0>;
     type One<'a> = StaticRcRef<'a, i32, 1, 1>;
     type Two<'a> = StaticRcRef<'a, i32, 2, 2>;
+    type Half<'a> = StaticRcRef<'a, i32, 1, 2>;
 
     #[test]
     #[should_panic]
@@ -1214,9 +1190,9 @@ mod panic_ratio_tests {
     fn rcref_join_array_ratio() {
         let mut value = 42;
         let rc = Two::new(&mut value);
-        let array: [_; 2] = Two::split_array::<1, 2>(rc);
+        let array: [Half; 2] = Two::split_array::<1, 2>(rc);
 
-        StaticRcRef::<'_, _, 1, 2>::join_array(array);
+        Half::join_array(array);
     }
 
     #[test]
