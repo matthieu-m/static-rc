@@ -585,6 +585,43 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
             _marker: PhantomData,
         }
     }
+
+    /// Transmute the instance to a different count.
+    ///
+    /// #  Safety
+    ///
+    /// The caller must guarantee that new count is correct.
+    ///
+    /// Under counting will lead to memory leaks, over counting will lead to double frees (undefined behavior).
+    ///
+    /// #   Example
+    ///
+    /// ```rust
+    /// use static_rc::StaticRcRef;
+    ///
+    /// type Full<'a> = StaticRcRef<'a, i32, 2, 2>;
+    /// type Half<'a> = StaticRcRef<'a, i32, 1, 2>;
+    /// type Single<'a> = StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut binding = 42;
+    /// let rc = Full::new(&mut binding);
+    /// let (left, right): (Half, Half) = Full::split(rc);
+    ///
+    /// // "Forget" the left instance
+    /// let _ = left;
+    ///
+    /// // SAFETY: The right instance is now the only owner of the allocation.
+    /// let rc: Single = unsafe { Half::transmute(right) };
+    ///
+    /// assert_eq!(&mut 42, Single::into_inner(rc));
+    /// ```
+    #[inline(always)]
+    pub unsafe fn transmute<const A: usize, const B: usize>(self) -> StaticRcRef<'a, T, A, B> {
+        StaticRcRef {
+            pointer: self.pointer,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, const NUM: usize, const DEN: usize> StaticRcRef<'a, dyn any::Any, NUM, DEN> {

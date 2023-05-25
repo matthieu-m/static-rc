@@ -601,7 +601,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         Self::join_array_impl(array)
     }
 
-    /// Transmute the instance to a different type.
+    /// Transmute the instance to a different count.
     ///
     /// #  Safety
     ///
