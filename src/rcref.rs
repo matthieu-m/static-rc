@@ -1,18 +1,10 @@
 //! `StaticRcRef` is a compile-time referenced counted access to a mutable reference.
 
 use core::{
-    any,
-    borrow,
-    cmp,
-    convert,
-    fmt,
-    future,
-    hash,
-    iter,
+    any, borrow, cmp, convert, fmt, future, hash, iter,
     marker::{self, PhantomData},
     mem::{self, MaybeUninit},
-    ops,
-    pin,
+    ops, pin,
     ptr::{self, NonNull},
     task,
 };
@@ -64,7 +56,10 @@ impl<'a, T: ?Sized, const N: usize> StaticRcRef<'a, T, N, N> {
         assert!(N > 0);
 
         let pointer = NonNull::from(value);
-        Self { pointer, _marker: PhantomData }
+        Self {
+            pointer,
+            _marker: PhantomData,
+        }
     }
 
     /// Returns the inner value.
@@ -126,7 +121,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(&mut value as *mut _, pointer.as_ptr());
     /// ```
     #[inline(always)]
-    pub fn into_raw(this: Self) -> NonNull<T> { this.pointer }
+    pub fn into_raw(this: Self) -> NonNull<T> {
+        this.pointer
+    }
 
     /// Provides a raw pointer to the data.
     ///
@@ -148,7 +145,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(pointer, other_pointer.as_ptr());
     /// ```
     #[inline(always)]
-    pub fn as_ptr(this: &Self) -> NonNull<T> { this.pointer }
+    pub fn as_ptr(this: &Self) -> NonNull<T> {
+        this.pointer
+    }
 
     /// Provides a reference to the data.
     ///
@@ -191,7 +190,10 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         #[cfg(not(feature = "compile-time-ratio"))]
         assert!(NUM > 0);
 
-        Self { pointer, _marker: PhantomData, }
+        Self {
+            pointer,
+            _marker: PhantomData,
+        }
     }
 
     /// Returns true if the two `StaticRcRef` point to the same allocation.
@@ -210,7 +212,10 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert!(StaticRcRef::ptr_eq(&one, &two));
     /// ```
     #[inline(always)]
-    pub fn ptr_eq<const N: usize, const D: usize>(this: &Self, other: &StaticRcRef<'a, T, N, D>) -> bool {
+    pub fn ptr_eq<const N: usize, const D: usize>(
+        this: &Self,
+        other: &StaticRcRef<'a, T, N, D>,
+    ) -> bool {
         StaticRcRef::as_ptr(this) == StaticRcRef::as_ptr(other)
     }
 
@@ -245,15 +250,18 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
             assert_eq!(NUM * D, N * DEN, "{} / {} != {} / {}", NUM, DEN, N, D);
         }
 
-        StaticRcRef { pointer: this.pointer, _marker: PhantomData }
+        StaticRcRef {
+            pointer: this.pointer,
+            _marker: PhantomData,
+        }
     }
 
     /// Reborrows into another [`StaticRcRef`].
-    /// 
+    ///
     /// The current instance is mutably borrowed for the duration the result can be used.
-    /// 
+    ///
     /// #   Example
-    /// 
+    ///
     /// ```rust
     /// use static_rc::StaticRcRef;
     /// let mut x = 5;
@@ -307,7 +315,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(42, *two);
     /// ```
     #[inline(always)]
-    pub fn split<const A: usize, const B: usize>(this: Self) -> (StaticRcRef<'a, T, A, DEN>, StaticRcRef<'a, T, B, DEN>)
+    pub fn split<const A: usize, const B: usize>(
+        this: Self,
+    ) -> (StaticRcRef<'a, T, A, DEN>, StaticRcRef<'a, T, B, DEN>)
     where
         AssertLeType!(1, A): Sized,
         AssertLeType!(1, B): Sized,
@@ -323,7 +333,10 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         let pointer = this.pointer;
         let _marker = PhantomData;
 
-        (StaticRcRef { pointer, _marker, }, StaticRcRef { pointer, _marker, })
+        (
+            StaticRcRef { pointer, _marker },
+            StaticRcRef { pointer, _marker },
+        )
     }
 
     /// Splits the current instance into DIM instances with the specified Numerators.
@@ -347,18 +360,26 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(42, *array[1]);
     /// ```
     #[inline(always)]
-    pub fn split_array<const N: usize, const DIM: usize>(this: Self) -> [StaticRcRef<'a, T, N, DEN>; DIM]
+    pub fn split_array<const N: usize, const DIM: usize>(
+        this: Self,
+    ) -> [StaticRcRef<'a, T, N, DEN>; DIM]
     where
         T: 'a,
         AssertEqType!(N * DIM, NUM): Sized,
-        AssertLeType!(mem::size_of::<[StaticRcRef<'a, T, N, DEN>; DIM]>(), usize::MAX / 2 + 1): Sized,
+        AssertLeType!(
+            mem::size_of::<[StaticRcRef<'a, T, N, DEN>; DIM]>(),
+            usize::MAX / 2 + 1
+        ): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
         {
             assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
 
-            assert!(mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>() <= (isize::MAX as usize),
-                "Size of result ({}) exceeeds isize::MAX", mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>());
+            assert!(
+                mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>() <= (isize::MAX as usize),
+                "Size of result ({}) exceeeds isize::MAX",
+                mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>()
+            );
         }
 
         let pointer = this.pointer;
@@ -376,7 +397,9 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
             //  Safety:
             //  -   `destination` is valid for writes.
             //  -   `destination` is correctly aligned.
-            unsafe { ptr::write(destination, StaticRcRef { pointer, _marker, }); }
+            unsafe {
+                ptr::write(destination, StaticRcRef { pointer, _marker });
+            }
         }
 
         //  Safety:
@@ -407,12 +430,20 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(42, *rc);
     /// ```
     #[inline(always)]
-    pub fn join<const A: usize, const B: usize>(left: StaticRcRef<'a, T, A, DEN>, right: StaticRcRef<'a, T, B, DEN>) -> Self
-    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
+    pub fn join<const A: usize, const B: usize>(
+        left: StaticRcRef<'a, T, A, DEN>,
+        right: StaticRcRef<'a, T, B, DEN>,
+    ) -> Self
+//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertEqType!(NUM, A + B): Sized,
     {
-        assert!(StaticRcRef::ptr_eq(&left, &right), "{:?} != {:?}", left.pointer.as_ptr(), right.pointer.as_ptr());
+        assert!(
+            StaticRcRef::ptr_eq(&left, &right),
+            "{:?} != {:?}",
+            left.pointer.as_ptr(),
+            right.pointer.as_ptr()
+        );
 
         //  Safety:
         //  -   `left` and `right` point to the same pointer.
@@ -452,7 +483,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         left: StaticRcRef<'a, T, A, DEN>,
         _right: StaticRcRef<'a, T, B, DEN>,
     ) -> Self
-    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
+//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertEqType!(NUM, A + B): Sized,
     {
@@ -460,9 +491,17 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         //  #[cfg(not(feature = "compile-time-ratio"))]
         assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
 
-        debug_assert!(StaticRcRef::ptr_eq(&left, &_right), "{:?} != {:?}", left.pointer.as_ptr(), _right.pointer.as_ptr());
+        debug_assert!(
+            StaticRcRef::ptr_eq(&left, &_right),
+            "{:?} != {:?}",
+            left.pointer.as_ptr(),
+            _right.pointer.as_ptr()
+        );
 
-        Self { pointer: left.pointer, _marker: PhantomData, }
+        Self {
+            pointer: left.pointer,
+            _marker: PhantomData,
+        }
     }
 
     /// Joins DIM instances into a single instance.
@@ -488,16 +527,22 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(42, *rc);
     /// ```
     #[inline(always)]
-    pub fn join_array<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM]) -> Self
-    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
+    pub fn join_array<const N: usize, const DIM: usize>(
+        array: [StaticRcRef<'a, T, N, DEN>; DIM],
+    ) -> Self
+//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertLeType!(1, NUM): Sized,
     //      AssertEqType!(N * DIM, NUM): Sized,
     {
         let first = &array[0];
         for successive in &array[1..] {
-            assert!(StaticRcRef::ptr_eq(&first, &successive),
-                "{:?} != {:?}", first.pointer.as_ptr(), successive.pointer.as_ptr());
+            assert!(
+                StaticRcRef::ptr_eq(&first, &successive),
+                "{:?} != {:?}",
+                first.pointer.as_ptr(),
+                successive.pointer.as_ptr()
+            );
         }
 
         unsafe { Self::join_array_unchecked(array) }
@@ -526,9 +571,10 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// assert_eq!(42, *rc);
     /// ```
     #[inline(always)]
-    pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM])
-        -> Self
-    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
+    pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(
+        array: [StaticRcRef<'a, T, N, DEN>; DIM],
+    ) -> Self
+//  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
     //  where
     //      AssertLeType!(1, NUM): Sized,
     //      AssertEqType!(N * DIM, NUM): Sized,
@@ -542,14 +588,19 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
 
         let _first = &array[0];
         for _successive in &array[1..] {
-            debug_assert!(StaticRcRef::ptr_eq(&_first, &_successive),
-                "{:?} != {:?}", _first.pointer.as_ptr(), _successive.pointer.as_ptr());
+            debug_assert!(
+                StaticRcRef::ptr_eq(&_first, &_successive),
+                "{:?} != {:?}",
+                _first.pointer.as_ptr(),
+                _successive.pointer.as_ptr()
+            );
         }
 
-        Self { pointer: array[0].pointer, _marker: PhantomData, }
+        Self {
+            pointer: array[0].pointer,
+            _marker: PhantomData,
+        }
     }
-
-    
 }
 
 impl<'a, const NUM: usize, const DEN: usize> StaticRcRef<'a, dyn any::Any, NUM, DEN> {
@@ -557,7 +608,10 @@ impl<'a, const NUM: usize, const DEN: usize> StaticRcRef<'a, dyn any::Any, NUM, 
     pub fn downcast<T: any::Any>(self) -> Result<StaticRcRef<'a, T, NUM, DEN>, Self> {
         if Self::get_ref(&self).is::<T>() {
             let pointer = Self::into_raw(self).cast::<T>();
-            Ok(StaticRcRef { pointer, _marker: PhantomData, })
+            Ok(StaticRcRef {
+                pointer,
+                _marker: PhantomData,
+            })
         } else {
             Err(self)
         }
@@ -566,51 +620,75 @@ impl<'a, const NUM: usize, const DEN: usize> StaticRcRef<'a, dyn any::Any, NUM, 
 
 impl<'a, T: ?Sized, const N: usize> convert::AsMut<T> for StaticRcRef<'a, T, N, N> {
     #[inline(always)]
-    fn as_mut(&mut self) -> &mut T { Self::get_mut(self) }
+    fn as_mut(&mut self) -> &mut T {
+        Self::get_mut(self)
+    }
 }
 
-impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> convert::AsRef<T> for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> convert::AsRef<T>
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     #[inline(always)]
-    fn as_ref(&self) -> &T { Self::get_ref(self) }
+    fn as_ref(&self) -> &T {
+        Self::get_ref(self)
+    }
 }
 
-impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> borrow::Borrow<T> for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> borrow::Borrow<T>
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     #[inline(always)]
-    fn borrow(&self) -> &T { Self::get_ref(self) }
+    fn borrow(&self) -> &T {
+        Self::get_ref(self)
+    }
 }
 
 impl<'a, T: ?Sized, const N: usize> borrow::BorrowMut<T> for StaticRcRef<'a, T, N, N> {
     #[inline(always)]
-    fn borrow_mut(&mut self) -> &mut T { Self::get_mut(self) }
+    fn borrow_mut(&mut self) -> &mut T {
+        Self::get_mut(self)
+    }
 }
 
 #[cfg(feature = "nightly-coerce-unsized")]
-impl<'a, T, U, const NUM: usize, const DEN: usize> CoerceUnsized<StaticRcRef<'a, U, NUM, DEN>> for StaticRcRef<'a, T, NUM, DEN>
+impl<'a, T, U, const NUM: usize, const DEN: usize> CoerceUnsized<StaticRcRef<'a, U, NUM, DEN>>
+    for StaticRcRef<'a, T, NUM, DEN>
 where
     T: ?Sized + marker::Unsize<U>,
     U: ?Sized,
-{}
+{
+}
 
-impl<'a, T: ?Sized + fmt::Debug, const NUM: usize, const DEN: usize> fmt::Debug for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized + fmt::Debug, const NUM: usize, const DEN: usize> fmt::Debug
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     #[inline(always)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         fmt::Debug::fmt(Self::get_ref(self), f)
     }
 }
 
-impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> ops::Deref for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> ops::Deref
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     type Target = T;
 
     #[inline(always)]
-    fn deref(&self) -> &T { Self::get_ref(self) }
+    fn deref(&self) -> &T {
+        Self::get_ref(self)
+    }
 }
 
 impl<'a, T: ?Sized, const N: usize> ops::DerefMut for StaticRcRef<'a, T, N, N> {
     #[inline(always)]
-    fn deref_mut(&mut self) -> &mut T { Self::get_mut(self) }
+    fn deref_mut(&mut self) -> &mut T {
+        Self::get_mut(self)
+    }
 }
 
-impl<'a, T: ?Sized + fmt::Display, const NUM: usize, const DEN: usize> fmt::Display for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized + fmt::Display, const NUM: usize, const DEN: usize> fmt::Display
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     #[inline(always)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         fmt::Display::fmt(Self::get_ref(self), f)
@@ -618,28 +696,45 @@ impl<'a, T: ?Sized + fmt::Display, const NUM: usize, const DEN: usize> fmt::Disp
 }
 
 #[cfg(feature = "nightly-dispatch-from-dyn")]
-impl<'a, T, U, const NUM: usize, const DEN: usize> DispatchFromDyn<StaticRcRef<'a, U, NUM, DEN>> for StaticRcRef<'a, T, NUM, DEN>
+impl<'a, T, U, const NUM: usize, const DEN: usize> DispatchFromDyn<StaticRcRef<'a, U, NUM, DEN>>
+    for StaticRcRef<'a, T, NUM, DEN>
 where
     T: ?Sized + marker::Unsize<U>,
     U: ?Sized,
-{}
-
-impl<'a, I: iter::DoubleEndedIterator + ?Sized, const N: usize> iter::DoubleEndedIterator for StaticRcRef<'a, I, N, N> {
-    #[inline(always)]
-    fn next_back(&mut self) -> Option<I::Item> { Self::get_mut(self).next_back() }
-
-    #[inline(always)]
-    fn nth_back(&mut self, n: usize) -> Option<I::Item> { Self::get_mut(self).nth_back(n) }
+{
 }
 
-impl<'a, T: ?Sized + cmp::Eq, const NUM: usize, const DEN: usize> cmp::Eq for StaticRcRef<'a, T, NUM, DEN> {}
-
-impl<'a, I: iter::ExactSizeIterator + ?Sized, const N: usize> iter::ExactSizeIterator for StaticRcRef<'a, I, N, N> {
+impl<'a, I: iter::DoubleEndedIterator + ?Sized, const N: usize> iter::DoubleEndedIterator
+    for StaticRcRef<'a, I, N, N>
+{
     #[inline(always)]
-    fn len(&self) -> usize { Self::get_ref(self).len() }
+    fn next_back(&mut self) -> Option<I::Item> {
+        Self::get_mut(self).next_back()
+    }
+
+    #[inline(always)]
+    fn nth_back(&mut self, n: usize) -> Option<I::Item> {
+        Self::get_mut(self).nth_back(n)
+    }
 }
 
-impl<'a, const NUM: usize, const DEN: usize> From<StaticRcRef<'a, str, NUM, DEN>> for StaticRcRef<'a, [u8], NUM, DEN> {
+impl<'a, T: ?Sized + cmp::Eq, const NUM: usize, const DEN: usize> cmp::Eq
+    for StaticRcRef<'a, T, NUM, DEN>
+{
+}
+
+impl<'a, I: iter::ExactSizeIterator + ?Sized, const N: usize> iter::ExactSizeIterator
+    for StaticRcRef<'a, I, N, N>
+{
+    #[inline(always)]
+    fn len(&self) -> usize {
+        Self::get_ref(self).len()
+    }
+}
+
+impl<'a, const NUM: usize, const DEN: usize> From<StaticRcRef<'a, str, NUM, DEN>>
+    for StaticRcRef<'a, [u8], NUM, DEN>
+{
     #[inline(always)]
     fn from(value: StaticRcRef<'a, str, NUM, DEN>) -> Self {
         let pointer = value.pointer.as_ptr() as *mut [u8];
@@ -649,13 +744,21 @@ impl<'a, const NUM: usize, const DEN: usize> From<StaticRcRef<'a, str, NUM, DEN>
         debug_assert!(!pointer.is_null());
         let pointer = unsafe { NonNull::new_unchecked(pointer) };
 
-        Self { pointer, _marker: PhantomData, }
+        Self {
+            pointer,
+            _marker: PhantomData,
+        }
     }
 }
 
-impl<'a, I: iter::FusedIterator + ?Sized, const N: usize> iter::FusedIterator for StaticRcRef<'a, I, N, N> {}
+impl<'a, I: iter::FusedIterator + ?Sized, const N: usize> iter::FusedIterator
+    for StaticRcRef<'a, I, N, N>
+{
+}
 
-impl<'a, F: ?Sized + future::Future + marker::Unpin, const N: usize> future::Future for StaticRcRef<'a, F, N, N> {
+impl<'a, F: ?Sized + future::Future + marker::Unpin, const N: usize> future::Future
+    for StaticRcRef<'a, F, N, N>
+{
     type Output = F::Output;
 
     fn poll(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
@@ -664,26 +767,38 @@ impl<'a, F: ?Sized + future::Future + marker::Unpin, const N: usize> future::Fut
 }
 
 #[cfg(feature = "nightly-generator-trait")]
-impl<'a, G: ?Sized + ops::Generator<R> + marker::Unpin, R, const N: usize> ops::Generator<R> for StaticRcRef<'a, G, N, N> {
+impl<'a, G: ?Sized + ops::Generator<R> + marker::Unpin, R, const N: usize> ops::Generator<R>
+    for StaticRcRef<'a, G, N, N>
+{
     type Yield = G::Yield;
     type Return = G::Return;
 
-        fn resume(mut self: pin::Pin<&mut Self>, arg: R) -> ops::GeneratorState<Self::Yield, Self::Return> {
-            G::resume(pin::Pin::new(&mut *self), arg)
-        }
+    fn resume(
+        mut self: pin::Pin<&mut Self>,
+        arg: R,
+    ) -> ops::GeneratorState<Self::Yield, Self::Return> {
+        G::resume(pin::Pin::new(&mut *self), arg)
+    }
 }
 
 #[cfg(feature = "nightly-generator-trait")]
-impl<'a, G: ?Sized + ops::Generator<R>, R, const N: usize> ops::Generator<R> for pin::Pin<StaticRcRef<'a, G, N, N>> {
+impl<'a, G: ?Sized + ops::Generator<R>, R, const N: usize> ops::Generator<R>
+    for pin::Pin<StaticRcRef<'a, G, N, N>>
+{
     type Yield = G::Yield;
     type Return = G::Return;
 
-        fn resume(mut self: pin::Pin<&mut Self>, arg: R) -> ops::GeneratorState<Self::Yield, Self::Return> {
-            G::resume((*self).as_mut(), arg)
-        }
+    fn resume(
+        mut self: pin::Pin<&mut Self>,
+        arg: R,
+    ) -> ops::GeneratorState<Self::Yield, Self::Return> {
+        G::resume((*self).as_mut(), arg)
+    }
 }
 
-impl<'a, T: ?Sized + hash::Hash, const NUM: usize, const DEN: usize> hash::Hash for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized + hash::Hash, const NUM: usize, const DEN: usize> hash::Hash
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     #[inline(always)]
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         Self::get_ref(self).hash(state);
@@ -694,19 +809,29 @@ impl<'a, I: iter::Iterator + ?Sized, const N: usize> iter::Iterator for StaticRc
     type Item = I::Item;
 
     #[inline(always)]
-    fn next(&mut self) -> Option<I::Item> { Self::get_mut(self).next() }
+    fn next(&mut self) -> Option<I::Item> {
+        Self::get_mut(self).next()
+    }
 
     #[inline(always)]
-    fn size_hint(&self) -> (usize, Option<usize>) { Self::get_ref(self).size_hint() }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        Self::get_ref(self).size_hint()
+    }
 
     #[inline(always)]
-    fn nth(&mut self, n: usize) -> Option<I::Item> { Self::get_mut(self).nth(n) }
+    fn nth(&mut self, n: usize) -> Option<I::Item> {
+        Self::get_mut(self).nth(n)
+    }
 
     #[inline(always)]
-    fn last(mut self) -> Option<I::Item> { Self::get_mut(&mut self).last() }
+    fn last(mut self) -> Option<I::Item> {
+        Self::get_mut(&mut self).last()
+    }
 }
 
-impl<'a, T: ?Sized + cmp::Ord, const NUM: usize, const DEN: usize> cmp::Ord for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized + cmp::Ord, const NUM: usize, const DEN: usize> cmp::Ord
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     #[inline(always)]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         if Self::ptr_eq(self, other) {
@@ -717,22 +842,26 @@ impl<'a, T: ?Sized + cmp::Ord, const NUM: usize, const DEN: usize> cmp::Ord for 
     }
 }
 
-impl<'a, T, const NUM: usize, const DEN: usize, const N: usize, const D: usize> cmp::PartialEq<StaticRcRef<'a, T, N, D>>
-    for StaticRcRef<'a, T, NUM, DEN>
+impl<'a, T, const NUM: usize, const DEN: usize, const N: usize, const D: usize>
+    cmp::PartialEq<StaticRcRef<'a, T, N, D>> for StaticRcRef<'a, T, NUM, DEN>
 where
-    T: ?Sized + PartialEq<T>
+    T: ?Sized + PartialEq<T>,
 {
     #[inline(always)]
-    fn eq(&self, other: &StaticRcRef<'a, T, N, D>) -> bool { Self::get_ref(self).eq(StaticRcRef::get_ref(other)) }
+    fn eq(&self, other: &StaticRcRef<'a, T, N, D>) -> bool {
+        Self::get_ref(self).eq(StaticRcRef::get_ref(other))
+    }
 
     #[inline(always)]
-    fn ne(&self, other: &StaticRcRef<'a, T, N, D>) -> bool { Self::get_ref(self).ne(StaticRcRef::get_ref(other)) }
+    fn ne(&self, other: &StaticRcRef<'a, T, N, D>) -> bool {
+        Self::get_ref(self).ne(StaticRcRef::get_ref(other))
+    }
 }
 
-impl<'a, T, const NUM: usize, const DEN: usize, const N: usize, const D: usize> cmp::PartialOrd<StaticRcRef<'a, T, N, D>>
-    for StaticRcRef<'a, T, NUM, DEN>
+impl<'a, T, const NUM: usize, const DEN: usize, const N: usize, const D: usize>
+    cmp::PartialOrd<StaticRcRef<'a, T, N, D>> for StaticRcRef<'a, T, NUM, DEN>
 where
-    T: ?Sized + PartialOrd<T>
+    T: ?Sized + PartialOrd<T>,
 {
     #[inline(always)]
     fn partial_cmp(&self, other: &StaticRcRef<'a, T, N, D>) -> Option<cmp::Ordering> {
@@ -760,7 +889,9 @@ where
     }
 }
 
-impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> fmt::Pointer for StaticRcRef<'a, T, NUM, DEN> {
+impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> fmt::Pointer
+    for StaticRcRef<'a, T, NUM, DEN>
+{
     #[inline(always)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&Self::as_ptr(self).as_ptr(), f)
@@ -768,331 +899,344 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> fmt::Pointer for StaticR
 }
 
 #[cfg(feature = "nightly-async-iterator")]
-impl<'a, S: ?Sized + async_iter::AsyncIterator + marker::Unpin, const N: usize> async_iter::AsyncIterator for StaticRcRef<'a, S, N, N> {
+impl<'a, S: ?Sized + async_iter::AsyncIterator + marker::Unpin, const N: usize>
+    async_iter::AsyncIterator for StaticRcRef<'a, S, N, N>
+{
     type Item = S::Item;
 
-    fn poll_next(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: pin::Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+    ) -> task::Poll<Option<Self::Item>> {
         pin::Pin::new(&mut **self).poll_next(cx)
     }
 
-    fn size_hint(&self) -> (usize, Option<usize>) { (**self).size_hint() }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (**self).size_hint()
+    }
 }
 
-impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> marker::Unpin for StaticRcRef<'a, T, NUM, DEN> {}
+impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> marker::Unpin
+    for StaticRcRef<'a, T, NUM, DEN>
+{
+}
 
-unsafe impl<'a, T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> marker::Send for StaticRcRef<'a, T, NUM, DEN> {}
+unsafe impl<'a, T: ?Sized + marker::Send, const NUM: usize, const DEN: usize> marker::Send
+    for StaticRcRef<'a, T, NUM, DEN>
+{
+}
 
-unsafe impl<'a, T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync for StaticRcRef<'a, T, NUM, DEN> {}
+unsafe impl<'a, T: ?Sized + marker::Sync, const NUM: usize, const DEN: usize> marker::Sync
+    for StaticRcRef<'a, T, NUM, DEN>
+{
+}
 
 #[doc(hidden)]
 pub mod compile_tests {
 
-/// ```compile_fail,E0597
-/// let a = String::from("foo");
-/// let mut a_ref = &a;
-/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a_ref);
-/// {
-///     let b = String::from("bar");
-///     *rc = &b; // a_ref now points to b
-/// }
-/// // b is now dropped
-/// assert_ne!(a_ref, "bar");  // This should fail to compile.
-/// ```
-pub fn rcref_prevent_use_after_free() {}
+    /// ```compile_fail,E0597
+    /// let a = String::from("foo");
+    /// let mut a_ref = &a;
+    /// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a_ref);
+    /// {
+    ///     let b = String::from("bar");
+    ///     *rc = &b; // a_ref now points to b
+    /// }
+    /// // b is now dropped
+    /// assert_ne!(a_ref, "bar");  // This should fail to compile.
+    /// ```
+    pub fn rcref_prevent_use_after_free() {}
 
-/// ```compile_fail,E0505
-/// let mut a = String::from("foo");
-/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
-/// 
-/// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
-/// std::mem::drop(rc);
-/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
-/// ```
-pub fn rcref_reborrow_and_move() {}
+    /// ```compile_fail,E0505
+    /// let mut a = String::from("foo");
+    /// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
+    ///
+    /// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
+    /// std::mem::drop(rc);
+    /// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+    /// ```
+    pub fn rcref_reborrow_and_move() {}
 
-/// ```compile_fail,E0502
-/// let mut a = String::from("foo");
-/// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
-/// 
-/// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
-/// assert_eq!(*rc, "foo");
-/// assert_eq!(*reborrow, "foo"); // This should fail to compile.
-/// ```
-pub fn rcref_reborrow_and_use() {}
-
+    /// ```compile_fail,E0502
+    /// let mut a = String::from("foo");
+    /// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
+    ///
+    /// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
+    /// assert_eq!(*rc, "foo");
+    /// assert_eq!(*reborrow, "foo"); // This should fail to compile.
+    /// ```
+    pub fn rcref_reborrow_and_use() {}
 } // mod compile_tests
 
 #[doc(hidden)]
 #[cfg(feature = "compile-time-ratio")]
 pub mod compile_ratio_tests {
 
-/// ```compile_fail,E0080
-/// type Zero<'a> = static_rc::StaticRcRef<'a, i32, 0, 0>;
-///
-/// let mut value = 42;
-///
-/// Zero::new(&mut value);
-/// ```
-pub fn rcref_new_zero() {}
+    /// ```compile_fail,E0080
+    /// type Zero<'a> = static_rc::StaticRcRef<'a, i32, 0, 0>;
+    ///
+    /// let mut value = 42;
+    ///
+    /// Zero::new(&mut value);
+    /// ```
+    pub fn rcref_new_zero() {}
 
-/// ```compile_fail,E0080
-/// type Zero<'a> = static_rc::StaticRcRef<'a, i32, 0, 0>;
-///
-/// let pointer = core::ptr::NonNull::dangling();
-///
-/// unsafe { Zero::from_raw(pointer) };
-/// ```
-pub fn rcref_from_raw_zero() {}
+    /// ```compile_fail,E0080
+    /// type Zero<'a> = static_rc::StaticRcRef<'a, i32, 0, 0>;
+    ///
+    /// let pointer = core::ptr::NonNull::dangling();
+    ///
+    /// unsafe { Zero::from_raw(pointer) };
+    /// ```
+    pub fn rcref_from_raw_zero() {}
 
-/// ```compile_fail,E0080
-/// type One<'a> = static_rc::StaticRcRef<'a, i32, 1, 1>;
-///
-/// let mut value = 42;
-/// let rc = One::new(&mut value);
-///
-/// One::adjust::<0, 0>(rc);
-/// ```
-pub fn rcref_adjust_zero() {}
+    /// ```compile_fail,E0080
+    /// type One<'a> = static_rc::StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let rc = One::new(&mut value);
+    ///
+    /// One::adjust::<0, 0>(rc);
+    /// ```
+    pub fn rcref_adjust_zero() {}
 
-/// ```compile_fail,E0080
-/// type One<'a> = static_rc::StaticRcRef<'a, i32, 1, 1>;
-///
-/// let mut value = 42;
-/// let rc = One::new(&mut value);
-///
-/// One::adjust::<2, 3>(rc);
-/// ```
-pub fn rcref_adjust_ratio() {}
+    /// ```compile_fail,E0080
+    /// type One<'a> = static_rc::StaticRcRef<'a, i32, 1, 1>;
+    ///
+    /// let mut value = 42;
+    /// let rc = One::new(&mut value);
+    ///
+    /// One::adjust::<2, 3>(rc);
+    /// ```
+    pub fn rcref_adjust_ratio() {}
 
-/// ```compile_fail,E0080
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-///
-/// Two::split::<0, 2>(rc);
-/// ```
-pub fn rcref_split_zero_first() {}
+    /// ```compile_fail,E0080
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    ///
+    /// Two::split::<0, 2>(rc);
+    /// ```
+    pub fn rcref_split_zero_first() {}
 
-/// ```compile_fail,E0080
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-///
-/// Two::split::<2, 0>(rc);
-/// ```
-pub fn rcref_split_zero_second() {}
+    /// ```compile_fail,E0080
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    ///
+    /// Two::split::<2, 0>(rc);
+    /// ```
+    pub fn rcref_split_zero_second() {}
 
-/// ```compile_fail,E0080
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-///
-/// Two::split::<1, 2>(rc);
-/// ```
-pub fn rcref_split_sum() {}
+    /// ```compile_fail,E0080
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    ///
+    /// Two::split::<1, 2>(rc);
+    /// ```
+    pub fn rcref_split_sum() {}
 
-/// ```compile_fail,E0080
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-///
-/// Two::split_array::<2, 2>(rc);
-/// ```
-pub fn rcref_split_array_ratio() {}
+    /// ```compile_fail,E0080
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    ///
+    /// Two::split_array::<2, 2>(rc);
+    /// ```
+    pub fn rcref_split_array_ratio() {}
 
-//  FIXME: should be "compile_fail,E0080"
-/// ```should_panic
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-/// let (one, two) = Two::split::<1, 1>(rc);
-///
-/// static_rc::StaticRcRef::<'_, _, 1, 2>::join(one, two);
-/// ```
-pub fn rcref_join_ratio() {}
+    //  FIXME: should be "compile_fail,E0080"
+    /// ```should_panic
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    /// let (one, two) = Two::split::<1, 1>(rc);
+    ///
+    /// static_rc::StaticRcRef::<'_, _, 1, 2>::join(one, two);
+    /// ```
+    pub fn rcref_join_ratio() {}
 
-//  FIXME: should be "compile_fail,E0080"
-/// ```should_panic
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-/// let (one, two) = Two::split::<1, 1>(rc);
-///
-/// unsafe { static_rc::StaticRcRef::<'_, _, 1, 2>::join_unchecked(one, two) };
-/// ```
-pub fn rcref_join_unchecked_ratio() {}
+    //  FIXME: should be "compile_fail,E0080"
+    /// ```should_panic
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    /// let (one, two) = Two::split::<1, 1>(rc);
+    ///
+    /// unsafe { static_rc::StaticRcRef::<'_, _, 1, 2>::join_unchecked(one, two) };
+    /// ```
+    pub fn rcref_join_unchecked_ratio() {}
 
-//  FIXME: should be "compile_fail,E0080"
-/// ```should_panic
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-/// let array: [_; 2] = Two::split_array::<1, 2>(rc);
-///
-/// static_rc::StaticRcRef::<'_, _, 1, 2>::join_array(array);
-/// ```
-pub fn rcref_join_array_ratio() {}
+    //  FIXME: should be "compile_fail,E0080"
+    /// ```should_panic
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    /// let array: [_; 2] = Two::split_array::<1, 2>(rc);
+    ///
+    /// static_rc::StaticRcRef::<'_, _, 1, 2>::join_array(array);
+    /// ```
+    pub fn rcref_join_array_ratio() {}
 
-//  FIXME: should be "compile_fail,E0080"
-/// ```should_panic
-/// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
-///
-/// let mut value = 42;
-/// let rc = Two::new(&mut value);
-/// let array: [_; 2] = Two::split_array::<1, 2>(rc);
-///
-/// unsafe { static_rc::StaticRcRef::<'_, _, 1, 2>::join_array_unchecked(array) };
-/// ```
-pub fn rcref_join_array_unchecked_ratio() {}
-
+    //  FIXME: should be "compile_fail,E0080"
+    /// ```should_panic
+    /// type Two<'a> = static_rc::StaticRcRef<'a, i32, 2, 2>;
+    ///
+    /// let mut value = 42;
+    /// let rc = Two::new(&mut value);
+    /// let array: [_; 2] = Two::split_array::<1, 2>(rc);
+    ///
+    /// unsafe { static_rc::StaticRcRef::<'_, _, 1, 2>::join_array_unchecked(array) };
+    /// ```
+    pub fn rcref_join_array_unchecked_ratio() {}
 } // mod compile_ratio_tests
 
 #[cfg(all(test, not(feature = "compile-time-ratio")))]
 mod panic_ratio_tests {
 
-use super::*;
+    use super::*;
 
-type Zero<'a> = StaticRcRef<'a, i32, 0, 0>;
-type One<'a> = StaticRcRef<'a, i32, 1, 1>;
-type Two<'a> = StaticRcRef<'a, i32, 2, 2>;
+    type Zero<'a> = StaticRcRef<'a, i32, 0, 0>;
+    type One<'a> = StaticRcRef<'a, i32, 1, 1>;
+    type Two<'a> = StaticRcRef<'a, i32, 2, 2>;
 
-#[test]
-#[should_panic]
-fn rcref_new_zero() {
-    let mut value = 42;
+    #[test]
+    #[should_panic]
+    fn rcref_new_zero() {
+        let mut value = 42;
 
-    Zero::new(&mut value);
-}
+        Zero::new(&mut value);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_from_raw_zero() {
-    let pointer = NonNull::dangling();
+    #[test]
+    #[should_panic]
+    fn rcref_from_raw_zero() {
+        let pointer = NonNull::dangling();
 
-    unsafe { Zero::from_raw(pointer) };
-}
+        unsafe { Zero::from_raw(pointer) };
+    }
 
-#[test]
-#[should_panic]
-fn rcref_adjust_zero() {
-    let mut value = 42;
-    let rc = One::new(&mut value);
+    #[test]
+    #[should_panic]
+    fn rcref_adjust_zero() {
+        let mut value = 42;
+        let rc = One::new(&mut value);
 
-    One::adjust::<0, 0>(rc);
-}
+        One::adjust::<0, 0>(rc);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_adjust_ratio() {
-    let mut value = 42;
-    let rc = One::new(&mut value);
+    #[test]
+    #[should_panic]
+    fn rcref_adjust_ratio() {
+        let mut value = 42;
+        let rc = One::new(&mut value);
 
-    One::adjust::<2, 3>(rc);
-}
+        One::adjust::<2, 3>(rc);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_split_zero_first() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
+    #[test]
+    #[should_panic]
+    fn rcref_split_zero_first() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
 
-    Two::split::<0, 2>(rc);
-}
+        Two::split::<0, 2>(rc);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_split_zero_second() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
+    #[test]
+    #[should_panic]
+    fn rcref_split_zero_second() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
 
-    Two::split::<0, 2>(rc);
-}
+        Two::split::<0, 2>(rc);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_split_sum() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
+    #[test]
+    #[should_panic]
+    fn rcref_split_sum() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
 
-    Two::split::<1, 2>(rc);
-}
+        Two::split::<1, 2>(rc);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_split_array_ratio() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
+    #[test]
+    #[should_panic]
+    fn rcref_split_array_ratio() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
 
-    Two::split_array::<2, 2>(rc);
-}
+        Two::split_array::<2, 2>(rc);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_join_ratio() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
-    let (one, two) = Two::split::<1, 1>(rc);
+    #[test]
+    #[should_panic]
+    fn rcref_join_ratio() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
+        let (one, two) = Two::split::<1, 1>(rc);
 
-    StaticRcRef::<'_, _, 1, 2>::join(one, two);
-}
+        StaticRcRef::<'_, _, 1, 2>::join(one, two);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_join_different() {
-    let (mut value, mut other_value) = (42, 33);
-    let (rc, other) = (Two::new(&mut value), Two::new(&mut other_value));
-    let (one, _two) = Two::split::<1, 1>(rc);
-    let (other_one, _other_two) = Two::split::<1, 1>(other);
+    #[test]
+    #[should_panic]
+    fn rcref_join_different() {
+        let (mut value, mut other_value) = (42, 33);
+        let (rc, other) = (Two::new(&mut value), Two::new(&mut other_value));
+        let (one, _two) = Two::split::<1, 1>(rc);
+        let (other_one, _other_two) = Two::split::<1, 1>(other);
 
-    Two::join(one, other_one);
-}
+        Two::join(one, other_one);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_join_unchecked_ratio() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
-    let (one, two) = Two::split::<1, 1>(rc);
+    #[test]
+    #[should_panic]
+    fn rcref_join_unchecked_ratio() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
+        let (one, two) = Two::split::<1, 1>(rc);
 
-    unsafe { StaticRcRef::<'_, _, 1, 2>::join_unchecked(one, two) };
-}
+        unsafe { StaticRcRef::<'_, _, 1, 2>::join_unchecked(one, two) };
+    }
 
-#[test]
-#[should_panic]
-fn rcref_join_array_ratio() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
-    let array: [_; 2] = Two::split_array::<1, 2>(rc);
+    #[test]
+    #[should_panic]
+    fn rcref_join_array_ratio() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
+        let array: [_; 2] = Two::split_array::<1, 2>(rc);
 
-    StaticRcRef::<'_, _, 1, 2>::join_array(array);
-}
+        StaticRcRef::<'_, _, 1, 2>::join_array(array);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_join_array_different() {
-    let (mut value, mut other_value) = (42, 33);
-    let (rc, other) = (Two::new(&mut value), Two::new(&mut other_value));
-    let (one, _two) = Two::split::<1, 1>(rc);
-    let (other_one, _other_two) = Two::split::<1, 1>(other);
+    #[test]
+    #[should_panic]
+    fn rcref_join_array_different() {
+        let (mut value, mut other_value) = (42, 33);
+        let (rc, other) = (Two::new(&mut value), Two::new(&mut other_value));
+        let (one, _two) = Two::split::<1, 1>(rc);
+        let (other_one, _other_two) = Two::split::<1, 1>(other);
 
-    Two::join_array([one, other_one]);
-}
+        Two::join_array([one, other_one]);
+    }
 
-#[test]
-#[should_panic]
-fn rcref_join_array_unchecked_ratio() {
-    let mut value = 42;
-    let rc = Two::new(&mut value);
-    let array = Two::split_array::<1, 2>(rc);
+    #[test]
+    #[should_panic]
+    fn rcref_join_array_unchecked_ratio() {
+        let mut value = 42;
+        let rc = Two::new(&mut value);
+        let array = Two::split_array::<1, 2>(rc);
 
-    unsafe { StaticRcRef::<'_, _, 1, 2>::join_array_unchecked(array) };
-}
-
+        unsafe { StaticRcRef::<'_, _, 1, 2>::join_array_unchecked(array) };
+    }
 } // mod panic_ratio_tests
