@@ -6,7 +6,9 @@
 //!
 //! #   Example of usage.
 //!
-//! ```
+//! ```rust
+//! # #[cfg(feature = "alloc")]
+//! # {
 //! use static_rc::StaticRc;
 //!
 //! type Full<T> = StaticRc<T, 3, 3>;
@@ -38,6 +40,7 @@
 //! assert_eq!("Hello, world!", &*full);
 //!
 //! //  Finally, the value is dropped when `full` is.
+//! # }
 //! ```
 //!
 //! #   Options
