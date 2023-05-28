@@ -72,9 +72,9 @@
     feature(unsize)
 )]
 // https://github.com/rust-lang/rust/issues/43122
-#![cfg_attr(feature = "nightly-generator-trait", feature(generator_trait))] // Unused ????
-#![cfg_attr(feature = "nightly-dispatch-from-dyn", feature(dispatch_from_dyn))] // Unused ????
-
+#![cfg_attr(feature = "nightly-generator-trait", feature(generator_trait))]
+// https://doc.rust-lang.org/core/ops/trait.DispatchFromDyn.html
+#![cfg_attr(feature = "nightly-dispatch-from-dyn", feature(dispatch_from_dyn))]
 //  Lints
 #![deny(missing_docs)]
 
