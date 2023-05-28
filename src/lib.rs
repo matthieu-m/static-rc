@@ -6,7 +6,9 @@
 //!
 //! #   Example of usage.
 //!
-//! ```
+//! ```rust
+//! # #[cfg(feature = "alloc")]
+//! # {
 //! use static_rc::StaticRc;
 //!
 //! type Full<T> = StaticRc<T, 3, 3>;
@@ -38,6 +40,7 @@
 //! assert_eq!("Hello, world!", &*full);
 //!
 //! //  Finally, the value is dropped when `full` is.
+//! # }
 //! ```
 //!
 //! #   Options
@@ -53,16 +56,25 @@
 
 //  Regular features
 #![cfg_attr(not(test), no_std)]
-
 //  Nightly features
 #![cfg_attr(feature = "compile-time-ratio", allow(incomplete_features))]
+// https://github.com/rust-lang/rust/issues/76560
 #![cfg_attr(feature = "compile-time-ratio", feature(generic_const_exprs))]
+// https://github.com/rust-lang/rust/issues/79024
 #![cfg_attr(feature = "nightly-async-iterator", feature(async_iterator))]
+// https://github.com/rust-lang/rust/issues/18598
 #![cfg_attr(feature = "nightly-coerce-unsized", feature(coerce_unsized))]
-#![cfg_attr(feature = "nightly-dispatch-from-dyn", feature(dispatch_from_dyn))]
-#![cfg_attr(any(feature = "nightly-dispatch-from-dyn", feature = "nightly-coerce-unsized"), feature(unsize))]
+#![cfg_attr(
+    any(
+        feature = "nightly-dispatch-from-dyn",
+        feature = "nightly-coerce-unsized"
+    ),
+    feature(unsize)
+)]
+// https://github.com/rust-lang/rust/issues/43122
 #![cfg_attr(feature = "nightly-generator-trait", feature(generator_trait))]
-
+// https://doc.rust-lang.org/core/ops/trait.DispatchFromDyn.html
+#![cfg_attr(feature = "nightly-dispatch-from-dyn", feature(dispatch_from_dyn))]
 //  Lints
 #![deny(missing_docs)]
 
