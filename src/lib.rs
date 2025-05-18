@@ -46,7 +46,7 @@
 //!
 //! The `alloc` crate can be opted out of, though this disables `StaticRc`.
 //!
-//! The crate only uses stable features by default, with a MSRV of 1.51 due to the use of const generics.
+//! The crate only uses stable features by default, with a MSRV of 1.57 due to the use of `assert!` in `const` blocks.
 //!
 //! Additional, the crate offers several optional features which unlock additional capabilities by using nightly.
 //! Please see `Cargo.toml` for an up-to-date list of features, and their effects.

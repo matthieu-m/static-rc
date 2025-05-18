@@ -63,7 +63,7 @@ impl<T, const N: usize> StaticRc<T, N, N> {
         AssertLeType!(1, N): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert!(N > 0);
+        const { assert!(N > 0); }
 
         let pointer = NonNull::from(Box::leak(Box::new(value)));
         Self { pointer }
@@ -87,7 +87,7 @@ impl<T, const N: usize> StaticRc<T, N, N> {
         AssertLeType!(1, N): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert!(N > 0);
+        const { assert!(N > 0); }
 
         //  Safety:
         //  -   The `value` is placed on the heap, and cannot be moved out of the heap without full ownership.
@@ -261,7 +261,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertLeType!(1, NUM): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert!(NUM > 0);
+        const { assert!(NUM > 0); }
 
         Self { pointer }
     }
@@ -289,10 +289,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
     /// Adjusts the NUMerator and DENUMerator of the ratio of the instance, preserving the ratio.
     ///
-    /// #   Panics
-    ///
-    /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N / D <> NUM / DEN`.
-    ///
     /// #   Example
     ///
     /// ```rust
@@ -312,9 +308,9 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(N * DEN, NUM * D): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        {
+        const {
             assert!(N > 0);
-            assert_eq!(NUM * D, N * DEN, "{NUM} / {DEN} != {N} / {D}");
+            assert!(NUM * D == N * DEN);
         }
 
         let pointer = this.pointer;
@@ -375,10 +371,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
     /// Splits the current instance into two instances with the specified NUMerators.
     ///
-    /// #   Panics
-    ///
-    /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `A + B <> NUM`.
-    ///
     /// #   Example
     ///
     /// ```rust
@@ -402,10 +394,10 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(A + B, NUM): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        {
+        const {
             assert!(A > 0);
             assert!(B > 0);
-            assert_eq!(NUM, A + B, "{NUM} != {A} + {B}");
+            assert!(NUM == A + B);
         }
 
         let pointer = this.pointer;
@@ -415,10 +407,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     }
 
     /// Splits the current instance into `DIM` instances with the specified Numerators and Denominators.
-    ///
-    /// #   Panics
-    ///
-    /// If the compile-time-ratio feature is not used, and the ratio is not preserved; that is `N * DIM <> NUM`.
     ///
     /// #   Example
     ///
@@ -441,11 +429,10 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertLeType!(mem::size_of::<[StaticRc<T, N, DEN>; DIM]>(), usize::MAX / 2 + 1): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM, N * DIM, "{NUM} != {N} * {DIM}");
-
-        #[cfg(not(feature = "compile-time-ratio"))]
-        assert!(mem::size_of::<[StaticRc<T, N, DEN>; DIM]>() <= (isize::MAX as usize),
-            "Size of result ({}) exceeeds isize::MAX", mem::size_of::<[StaticRc<T, N, DEN>; DIM]>());
+        const {
+            assert!(NUM == N * DIM);
+            assert!(mem::size_of::<[StaticRc<T, N, DEN>; DIM]>() <= (isize::MAX as usize));
+        }
 
         let pointer = this.pointer;
         mem::forget(this);
@@ -475,8 +462,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// #   Panics
     ///
     /// If the two instances do no point to the same allocation, as determined by `StaticRc::ptr_eq`.
-    ///
-    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
     ///
     /// #   Example
     ///
@@ -512,8 +497,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// The caller must guarantee that those instances point to the same allocation.
     ///
     /// #   Panics
-    ///
-    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `A + B <> NUM`.
     ///
     /// In debug, if the two instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
     ///
@@ -552,8 +535,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     ///
     /// If all instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
     ///
-    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
-    ///
     /// #   Example
     ///
     /// ```rust
@@ -585,8 +566,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// All instances must point to the same allocation, as determined by `StaticRc::ptr_eq`.
     ///
     /// #   Panics
-    ///
-    /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
     ///
     /// In debug, if all instances do not point to the same allocation, as determined by `StaticRc::ptr_eq`.
     ///
@@ -628,12 +607,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(NUM, A + B): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        if NUM != A + B {
-            mem::forget(left);
-            mem::forget(right);
-
-            panic!("{NUM} != {A} + {B}");
-        }
+        const { assert!(NUM == A + B); }
 
         let pointer = left.pointer;
         mem::forget(left);
@@ -651,18 +625,9 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(N * DIM, NUM): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        {
-            if NUM == 0 {
-                mem::forget(array);
-
-                panic!("NUM == 0");
-            }
-
-            if NUM != N * DIM {
-                mem::forget(array);
-
-                panic!("{NUM} != {N} * {DIM}");
-            }
+        const {
+            assert!(NUM > 0);
+            assert!(NUM == N * DIM);
         }
 
         let pointer = array[0].pointer;
@@ -1063,7 +1028,6 @@ pub fn rc_reborrow_and_use() {}
 } // mod compile_tests
 
 #[doc(hidden)]
-#[cfg(feature = "compile-time-ratio")]
 pub mod compile_ratio_tests {
 
 /// ```compile_fail,E0080
@@ -1184,174 +1148,3 @@ pub fn rc_join_array_ratio() {}
 pub fn rc_join_array_unchecked_ratio() {}
 
 } // mod compile_ratio_tests
-
-#[cfg(all(test, not(feature = "compile-time-ratio")))]
-mod panic_ratio_tests {
-
-use super::*;
-
-type Zero = StaticRc<i32, 0, 0>;
-type One = StaticRc<i32, 1, 1>;
-type Two = StaticRc<i32, 2, 2>;
-
-#[test]
-#[should_panic]
-fn rc_new_zero() {
-    Zero::new(42);
-}
-
-#[test]
-#[should_panic]
-fn rc_pin_zero() {
-    Zero::pin(42);
-}
-
-#[test]
-#[should_panic]
-fn rc_from_raw_zero() {
-    let pointer = NonNull::dangling();
-
-    unsafe { Zero::from_raw(pointer) };
-}
-
-#[test]
-#[should_panic]
-fn rc_adjust_zero() {
-    let rc = One::new(42);
-
-    One::adjust::<0, 0>(rc);
-}
-
-#[test]
-#[should_panic]
-fn rc_adjust_ratio() {
-    let rc = One::new(42);
-
-    One::adjust::<2, 3>(rc);
-}
-
-#[test]
-#[should_panic]
-fn rc_split_zero_first() {
-    let rc = Two::new(42);
-
-    Two::split::<0, 2>(rc);
-}
-
-#[test]
-#[should_panic]
-fn rc_split_zero_second() {
-    let rc = Two::new(42);
-
-    Two::split::<0, 2>(rc);
-}
-
-#[test]
-#[should_panic]
-fn rc_split_sum() {
-    let rc = Two::new(42);
-
-    Two::split::<1, 2>(rc);
-}
-
-#[test]
-#[should_panic]
-fn rc_split_array_ratio() {
-    let rc = Two::new(42);
-
-    Two::split_array::<2, 2>(rc);
-}
-
-#[test]
-#[should_panic]
-fn rc_join_ratio() {
-    let rc = Two::new(42);
-    will_leak(&rc);
-
-    let (one, two) = Two::split::<1, 1>(rc);
-
-    StaticRc::<_, 1, 2>::join(one, two);
-}
-
-#[test]
-#[should_panic]
-fn rc_join_different() {
-    let (rc, other) = (Two::new(42), Two::new(33));
-    will_leak(&rc);
-    will_leak(&other);
-
-    let (one, two) = Two::split::<1, 1>(rc);
-    let (other_one, other_two) = Two::split::<1, 1>(other);
-
-    mem::forget([two, other_two]);
-
-    Two::join(one, other_one);
-}
-
-#[test]
-#[should_panic]
-fn rc_join_unchecked_ratio() {
-    let rc = Two::new(42);
-    will_leak(&rc);
-
-    let (one, two) = Two::split::<1, 1>(rc);
-
-    unsafe { StaticRc::<_, 1, 2>::join_unchecked(one, two) };
-}
-
-#[test]
-#[should_panic]
-fn rc_join_array_ratio() {
-    let rc = Two::new(42);
-    will_leak(&rc);
-
-    let array: [_; 2] = Two::split_array::<1, 2>(rc);
-
-    StaticRc::<_, 1, 2>::join_array(array);
-}
-
-#[test]
-#[should_panic]
-fn rc_join_array_different() {
-    let (rc, other) = (Two::new(42), Two::new(33));
-    will_leak(&rc);
-    will_leak(&other);
-
-    let (one, two) = Two::split::<1, 1>(rc);
-    let (other_one, other_two) = Two::split::<1, 1>(other);
-
-    mem::forget([two, other_two]);
-
-    Two::join_array([one, other_one]);
-}
-
-#[test]
-#[should_panic]
-fn rc_join_array_unchecked_ratio() {
-    let rc = Two::new(42);
-    will_leak(&rc);
-
-    let array = Two::split_array::<1, 2>(rc);
-
-    unsafe { StaticRc::<_, 1, 2>::join_array_unchecked(array) };
-}
-
-//  Indicates that the pointed to memory will be leaked, to avoid it being reported.
-fn will_leak<T, const NUM: usize, const DEN: usize>(_rc: &StaticRc<T, NUM, DEN>) {
-    #[cfg(miri)]
-    {
-        unsafe { miri_static_root(StaticRc::as_ptr(_rc).as_ptr() as *const u8) };
-    }
-}
-
-#[cfg(miri)]
-extern "Rust" {
-    /// Miri-provided extern function to mark the block `ptr` points to as a "root"
-    /// for some static memory. This memory and everything reachable by it is not
-    /// considered leaking even if it still exists when the program terminates.
-    ///
-    /// `ptr` has to point to the beginning of an allocated block.
-    fn miri_static_root(ptr: *const u8);
-}
-
-} // mod panic_ratio_tests
