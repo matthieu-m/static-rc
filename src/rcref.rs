@@ -175,6 +175,8 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
 
     /// Constructs a `StaticRcRef<'a, T, NUM, DEN>` from a raw pointer.
     ///
+    /// #   Safety
+    ///
     /// The raw pointer must have been previously returned by a call to `StaticRcRef<'a, U, N, D>::into_raw`:
     ///
     /// -   If `U` is different from `T`, then specific restrictions on size and alignment apply. See `mem::transmute`
@@ -211,7 +213,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     /// ```
     #[inline(always)]
     pub fn ptr_eq<const N: usize, const D: usize>(this: &Self, other: &StaticRcRef<'a, T, N, D>) -> bool {
-        StaticRcRef::as_ptr(this) == StaticRcRef::as_ptr(other)
+        ptr::eq(StaticRcRef::as_ptr(this).as_ptr(), StaticRcRef::as_ptr(other).as_ptr())
     }
 
     /// Adjusts the NUMerator and DENumerator of the ratio of the instance, preserving the ratio.
@@ -242,18 +244,18 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         #[cfg(not(feature = "compile-time-ratio"))]
         {
             assert!(N > 0);
-            assert_eq!(NUM * D, N * DEN, "{} / {} != {} / {}", NUM, DEN, N, D);
+            assert_eq!(NUM * D, N * DEN, "{NUM} / DEN != {N} / {D}");
         }
 
         StaticRcRef { pointer: this.pointer, _marker: PhantomData }
     }
 
     /// Reborrows into another [`StaticRcRef`].
-    /// 
+    ///
     /// The current instance is mutably borrowed for the duration the result can be used.
-    /// 
+    ///
     /// #   Example
-    /// 
+    ///
     /// ```rust
     /// use static_rc::StaticRcRef;
     /// let mut x = 5;
@@ -282,7 +284,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         //      according to the general principle of this library.
         StaticRcRef {
             pointer: this.pointer,
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
 
@@ -317,7 +319,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         {
             assert!(A > 0);
             assert!(B > 0);
-            assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+            assert_eq!(NUM, A + B, "{NUM} != {A} + {B}");
         }
 
         let pointer = this.pointer;
@@ -355,7 +357,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     {
         #[cfg(not(feature = "compile-time-ratio"))]
         {
-            assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
+            assert_eq!(NUM, N * DIM, "{NUM} != {N} * {DIM}");
 
             assert!(mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>() <= (isize::MAX as usize),
                 "Size of result ({}) exceeeds isize::MAX", mem::size_of::<[StaticRcRef<T, N, DEN>; DIM]>());
@@ -452,13 +454,11 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
         left: StaticRcRef<'a, T, A, DEN>,
         _right: StaticRcRef<'a, T, B, DEN>,
     ) -> Self
-    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-    //  where
-    //      AssertEqType!(NUM, A + B): Sized,
+    where
+        AssertEqType!(NUM, A + B): Sized,
     {
-        //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-        //  #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+        #[cfg(not(feature = "compile-time-ratio"))]
+        assert_eq!(NUM, A + B, "{NUM} != {A} + {B}");
 
         debug_assert!(StaticRcRef::ptr_eq(&left, &_right), "{:?} != {:?}", left.pointer.as_ptr(), _right.pointer.as_ptr());
 
@@ -496,7 +496,7 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     {
         let first = &array[0];
         for successive in &array[1..] {
-            assert!(StaticRcRef::ptr_eq(&first, &successive),
+            assert!(StaticRcRef::ptr_eq(first, successive),
                 "{:?} != {:?}", first.pointer.as_ptr(), successive.pointer.as_ptr());
         }
 
@@ -504,6 +504,10 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     }
 
     /// Joins DIM instances into a single instance.
+    ///
+    /// #   Safety
+    ///
+    /// All `StaticRcRef` joined must point to the same allocation, as determined by `StaticRcRef::ptr_eq`.
     ///
     /// #   Panics
     ///
@@ -528,28 +532,26 @@ impl<'a, T: ?Sized, const NUM: usize, const DEN: usize> StaticRcRef<'a, T, NUM, 
     #[inline(always)]
     pub unsafe fn join_array_unchecked<const N: usize, const DIM: usize>(array: [StaticRcRef<'a, T, N, DEN>; DIM])
         -> Self
-    //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-    //  where
-    //      AssertLeType!(1, NUM): Sized,
-    //      AssertEqType!(N * DIM, NUM): Sized,
+    where
+        AssertLeType!(1, NUM): Sized,
+        AssertEqType!(N * DIM, NUM): Sized,
     {
-        //  FIXME: re-enable when https://github.com/rust-lang/rust/issues/77708 fixed
-        //  #[cfg(not(feature = "compile-time-ratio"))]
+        #[cfg(not(feature = "compile-time-ratio"))]
         {
             assert!(NUM > 0);
-            assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
+            assert_eq!(NUM, N * DIM, "{NUM} != {N} * {DIM}");
         }
 
         let _first = &array[0];
         for _successive in &array[1..] {
-            debug_assert!(StaticRcRef::ptr_eq(&_first, &_successive),
+            debug_assert!(StaticRcRef::ptr_eq(_first, _successive),
                 "{:?} != {:?}", _first.pointer.as_ptr(), _successive.pointer.as_ptr());
         }
 
         Self { pointer: array[0].pointer, _marker: PhantomData, }
     }
 
-    
+
 }
 
 impl<'a, const NUM: usize, const DEN: usize> StaticRcRef<'a, dyn any::Any, NUM, DEN> {
@@ -726,6 +728,7 @@ where
     fn eq(&self, other: &StaticRcRef<'a, T, N, D>) -> bool { Self::get_ref(self).eq(StaticRcRef::get_ref(other)) }
 
     #[inline(always)]
+    #[allow(clippy::partialeq_ne_impl)]
     fn ne(&self, other: &StaticRcRef<'a, T, N, D>) -> bool { Self::get_ref(self).ne(StaticRcRef::get_ref(other)) }
 }
 
@@ -803,7 +806,7 @@ pub fn rcref_prevent_use_after_free() {}
 /// ```compile_fail,E0505
 /// let mut a = String::from("foo");
 /// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
-/// 
+///
 /// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
 /// std::mem::drop(rc);
 /// assert_eq!(*reborrow, "foo"); // This should fail to compile.
@@ -813,7 +816,7 @@ pub fn rcref_reborrow_and_move() {}
 /// ```compile_fail,E0502
 /// let mut a = String::from("foo");
 /// let mut rc = static_rc::StaticRcRef::<'_, _,1,1>::new(&mut a);
-/// 
+///
 /// let mut reborrow = static_rc::StaticRcRef::reborrow(&mut rc);
 /// assert_eq!(*rc, "foo");
 /// assert_eq!(*reborrow, "foo"); // This should fail to compile.

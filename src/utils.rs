@@ -1,4 +1,4 @@
-/// A work-around arithmetic conditions in `where` clauses.
+//! A work-around arithmetic conditions in `where` clauses.
 
 #[cfg(feature = "compile-time-ratio")]
 macro_rules! AssertLeType {

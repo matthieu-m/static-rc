@@ -284,7 +284,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// ```
     #[inline(always)]
     pub fn ptr_eq<const N: usize, const D: usize>(this: &Self, other: &StaticRc<T, N, D>) -> bool {
-        StaticRc::as_ptr(this) == StaticRc::as_ptr(other)
+        ptr::eq(StaticRc::as_ptr(this).as_ptr(), StaticRc::as_ptr(other).as_ptr())
     }
 
     /// Adjusts the NUMerator and DENUMerator of the ratio of the instance, preserving the ratio.
@@ -314,7 +314,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         #[cfg(not(feature = "compile-time-ratio"))]
         {
             assert!(N > 0);
-            assert_eq!(NUM * D, N * DEN, "{} / {} != {} / {}", NUM, DEN, N, D);
+            assert_eq!(NUM * D, N * DEN, "{NUM} / {DEN} != {N} / {D}");
         }
 
         let pointer = this.pointer;
@@ -324,11 +324,11 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     }
 
     /// Converts an instance into a [`StaticRcRef`](super::StaticRcRef).
-    /// 
+    ///
     /// The current instance is mutably borrowed for the duration the result can be used.
-    /// 
+    ///
     /// #   Example
-    ///   
+    ///
     /// ```rust
     /// use static_rc::StaticRc;
     /// use static_rc::StaticRcRef;
@@ -347,7 +347,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
     /// assert_eq!(*StaticRc::into_box(rc), 9);
     /// ```
     #[inline(always)]
-    pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN> 
+    pub fn as_rcref<'a>(this: &'a mut Self) -> super::StaticRcRef<'a, T, NUM, DEN>
     where
         AssertLeType!(1, NUM): Sized,
     {
@@ -405,7 +405,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         {
             assert!(A > 0);
             assert!(B > 0);
-            assert_eq!(NUM, A + B, "{} != {} + {}", NUM, A, B);
+            assert_eq!(NUM, A + B, "{NUM} != {A} + {B}");
         }
 
         let pointer = this.pointer;
@@ -441,7 +441,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertLeType!(mem::size_of::<[StaticRc<T, N, DEN>; DIM]>(), usize::MAX / 2 + 1): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        assert_eq!(NUM, N * DIM, "{} != {} * {}", NUM, N, DIM);
+        assert_eq!(NUM, N * DIM, "{NUM} != {N} * {DIM}");
 
         #[cfg(not(feature = "compile-time-ratio"))]
         assert!(mem::size_of::<[StaticRc<T, N, DEN>; DIM]>() <= (isize::MAX as usize),
@@ -578,6 +578,10 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
     /// Joins DIM instances into a single instance.
     ///
+    /// #   Safety
+    ///
+    /// All instances must point to the same allocation, as determined by `StaticRc::ptr_eq`.
+    ///
     /// #   Panics
     ///
     /// If the compile-time-ratio feature is not used and the ratio is not preserved; that is `N * DIM <> NUM`.
@@ -620,11 +624,12 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(NUM, A + B): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
+        #[allow(non_fmt_panics)]
         if NUM != A + B {
             mem::forget(left);
             mem::forget(right);
 
-            panic!("{} != {} + {}", NUM, A, B);
+            panic!("{NUM} != {A} + {B}");
         }
 
         let pointer = left.pointer;
@@ -643,16 +648,18 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(N * DIM, NUM): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
+        #[allow(non_fmt_panics)]
         {
-            if NUM <= 0 {
+            if NUM == 0 {
                 mem::forget(array);
 
-                panic!("NUM <= 0");
+                panic!("NUM == 0");
             }
+
             if NUM != N * DIM {
                 mem::forget(array);
 
-                panic!("{} != {} * {}", NUM, N, DIM);
+                panic!("{NUM} != {N} * {DIM}");
             }
         }
 
@@ -677,7 +684,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
     fn validate_array<const N: usize, const DIM: usize>(array: [StaticRc<T, N, DEN>; DIM]) -> [StaticRc<T, N, DEN>; DIM] {
         let first = &array[0];
-        let divergent = array[1..].iter().find(|e| !StaticRc::ptr_eq(&first, e));
+        let divergent = array[1..].iter().find(|e| !StaticRc::ptr_eq(first, e));
 
         if let Some(divergent) = divergent {
             let first = first.pointer.as_ptr();
@@ -689,7 +696,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         }
 
         array
-    } 
+    }
 }
 
 impl<const NUM: usize, const DEN: usize> StaticRc<dyn any::Any, NUM, DEN> {
@@ -707,13 +714,13 @@ impl<const NUM: usize, const DEN: usize> StaticRc<dyn any::Any, NUM, DEN> {
 impl<T: ?Sized, const NUM: usize, const DEN: usize> Drop for StaticRc<T, NUM, DEN> {
     #[inline(always)]
     fn drop(&mut self) {
-        debug_assert_eq!(NUM, DEN, "{} != {}", NUM, DEN);
+        debug_assert_eq!(NUM, DEN, "{NUM} != {DEN}");
 
         if NUM == DEN {
             //  Safety:
             //  -   Ratio = 1, hence full ownership.
             //  -   `self.pointer` was allocated by Box.
-            unsafe { Box::from_raw(self.pointer.as_ptr()) };
+            let _ = unsafe { Box::from_raw(self.pointer.as_ptr()) };
         }
     }
 }
@@ -969,6 +976,7 @@ where
     fn eq(&self, other: &StaticRc<T, N, D>) -> bool { Self::get_ref(self).eq(StaticRc::get_ref(other)) }
 
     #[inline(always)]
+    #[allow(clippy::partialeq_ne_impl)]
     fn ne(&self, other: &StaticRc<T, N, D>) -> bool { Self::get_ref(self).ne(StaticRc::get_ref(other)) }
 }
 
@@ -1033,7 +1041,7 @@ pub mod compile_tests {
 /// ```compile_fail,E0505
 /// let mut a = String::from("foo");
 /// let mut rc = static_rc::StaticRc::<_,1,1>::new(a);
-/// 
+///
 /// let mut reborrow = static_rc::StaticRc::as_rcref(&mut rc);
 /// std::mem::drop(rc);
 /// assert_eq!(*reborrow, "foo"); // This should fail to compile.
@@ -1043,7 +1051,7 @@ pub fn rc_reborrow_and_move() {}
 /// ```compile_fail,E0502
 /// let mut a = String::from("foo");
 /// let mut rc = static_rc::StaticRc::<_,1,1>::new(a);
-/// 
+///
 /// let mut reborrow = static_rc::StaticRc::as_rcref(&mut rc);
 /// assert_eq!(*rc, "foo");
 /// assert_eq!(*reborrow, "foo"); // This should fail to compile.
