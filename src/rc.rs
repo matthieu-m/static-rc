@@ -499,7 +499,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         let (left, right) = Self::validate_pair(left, right);
 
         //  Safety:
-        //  -   `left` and `right` point to the same pointer.
+        //  -   `left` and `right` point to the same allocation.
         unsafe { Self::join_impl(left, right) }
     }
 
@@ -541,7 +541,9 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         #[cfg(debug_assertions)]
         let (left, right) = Self::validate_pair(left, right);
 
-        Self::join_impl(left, right)
+        //  Safety:
+        //  -   `left` and `right` point to the same allocation, as per pre-condition.
+        unsafe { Self::join_impl(left, right) }
     }
 
     /// Joins DIM instances into a single instance.
@@ -611,7 +613,9 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         #[cfg(debug_assertions)]
         let array = Self::validate_array(array);
 
-        Self::join_array_impl(array)
+        //  Safety:
+        //  -   All instances point to the same allocation, as per pre-condition.
+        unsafe { Self::join_array_impl(array) }
     }
 
     //  Internal; joins without validating origin.
@@ -624,7 +628,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(NUM, A + B): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        #[allow(non_fmt_panics)]
         if NUM != A + B {
             mem::forget(left);
             mem::forget(right);
@@ -648,7 +651,6 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
         AssertEqType!(N * DIM, NUM): Sized,
     {
         #[cfg(not(feature = "compile-time-ratio"))]
-        #[allow(non_fmt_panics)]
         {
             if NUM == 0 {
                 mem::forget(array);
@@ -692,7 +694,7 @@ impl<T: ?Sized, const NUM: usize, const DEN: usize> StaticRc<T, NUM, DEN> {
 
             mem::forget(array);
 
-            panic!("Cannot join array with multiple origins: {:?} != {:?}", first, divergent);
+            panic!("Cannot join array with multiple origins: {first:?} != {divergent:?}");
         }
 
         array
